@@ -1,0 +1,17 @@
+@page { size: A4 portrait; margin: 0; }
+
+.resume-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm 13mm;
+  background: white;
+  color: #202733;
+  box-shadow: 0 12px 36px rgb(20 36 58 / 12%);
+}
+
+@media print {
+  body { min-width: 0; background: white; }
+  .resume-page { box-shadow: none; break-after: page; }
+  .resume-page:last-child { break-after: auto; }
+}
+

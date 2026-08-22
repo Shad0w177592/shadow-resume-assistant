@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shadow-resume.local/schemas/parsed-document/v1",
+  "title": "ParsedDocument",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_id", "source_name", "media_type", "pages", "status"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_id": { "type": "string", "format": "uuid" },
+    "source_name": { "type": "string", "minLength": 1 },
+    "media_type": { "enum": ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "text/markdown"] },
+    "status": { "enum": ["parsed", "scanned", "encrypted", "damaged", "unsupported"] },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page_number", "blocks"],
+        "properties": {
+          "page_number": { "type": "integer", "minimum": 1 },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["block_id", "kind", "text", "order"],
+              "properties": {
+                "block_id": { "type": "string" },
+                "kind": { "enum": ["paragraph", "list_item", "table", "heading"] },
+                "text": { "type": "string" },
+                "order": { "type": "integer", "minimum": 0 },
+                "table_rows": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "failure_reason": { "type": ["string", "null"] }
+  }
+}
+

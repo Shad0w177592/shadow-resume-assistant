@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shadow-resume.local/schemas/resume-document/v1",
+  "title": "ResumeDocument",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "resume_id", "template", "page_target", "personal_info", "sections"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "resume_id": { "type": "string", "format": "uuid" },
+    "template": { "enum": ["single_column", "technical_double_column"] },
+    "page_target": { "enum": [1, 2] },
+    "personal_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "contacts"],
+      "properties": {
+        "name": { "type": "string" },
+        "headline": { "type": "string" },
+        "contacts": { "type": "array", "items": { "type": "string" } },
+        "photo_file_id": { "type": ["string", "null"] }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["section_id", "section_key", "title", "order", "column", "blocks"],
+        "properties": {
+          "section_id": { "type": "string" },
+          "section_key": { "type": "string" },
+          "title": { "type": "string" },
+          "order": { "type": "integer", "minimum": 0 },
+          "column": { "enum": ["full", "left", "right"] },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["block_id", "heading", "paragraphs"],
+              "properties": {
+                "block_id": { "type": "string" },
+                "heading": { "type": "string" },
+                "meta": { "type": "string" },
+                "paragraphs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["paragraph_id", "text", "source_entry_ids"],
+                    "properties": {
+                      "paragraph_id": { "type": "string" },
+                      "text": { "type": "string" },
+                      "source_entry_ids": { "type": "array", "minItems": 1, "items": { "type": "string", "format": "uuid" } },
+                      "risk_flags": { "type": "array", "items": { "type": "string" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

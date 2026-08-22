@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shadow-resume.local/schemas/job-analysis/v1",
+  "title": "JobAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_title", "company", "requirements"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "job_title": { "type": "string" },
+    "company": { "type": "string" },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "type", "summary", "source_text", "source_start", "source_end"],
+        "properties": {
+          "requirement_id": { "type": "string" },
+          "type": { "enum": ["responsibility", "required_skill", "preferred_skill", "experience", "education"] },
+          "summary": { "type": "string" },
+          "source_text": { "type": "string" },
+          "source_start": { "type": "integer", "minimum": 0 },
+          "source_end": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
+

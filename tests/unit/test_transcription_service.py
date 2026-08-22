@@ -1,0 +1,58 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from app.security.credentials import InMemoryCredentialStore
+from app.services.transcription_service import TranscriptionService
+
+
+class FakeOpenAI:
+    should_fail = False
+    options = {}
+
+    def __init__(self, api_key: str, **kwargs) -> None:
+        assert api_key == "sk-test-key"
+        type(self).options = {"api_key": api_key, **kwargs}
+        self.audio = SimpleNamespace(transcriptions=SimpleNamespace(create=self.create))
+
+    @classmethod
+    def create(cls, **_kwargs):
+        if cls.should_fail:
+            raise RuntimeError("network")
+        return SimpleNamespace(text="请把这一段写得更简洁")
+
+
+def test_transcription_temp_audio_is_deleted_on_success_and_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("app.services.transcription_service.OpenAI", FakeOpenAI)
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    service = TranscriptionService(credentials, tmp_path)
+    assert service.transcribe(b"voice") == "请把这一段写得更简洁"
+    assert list(tmp_path.iterdir()) == []
+    FakeOpenAI.should_fail = True
+    with pytest.raises(RuntimeError):
+        service.transcribe(b"voice")
+    assert list(tmp_path.iterdir()) == []
+    FakeOpenAI.should_fail = False
+
+
+def test_transcription_uses_configured_gateway(monkeypatch, tmp_path: Path) -> None:
+    class Database:
+        @staticmethod
+        def get_setting(_key, _default):
+            return {"base_url": "https://gateway.example.com/v1"}
+
+    monkeypatch.setattr("app.services.transcription_service.OpenAI", FakeOpenAI)
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    service = TranscriptionService(credentials, tmp_path, Database())
+    assert service.transcribe(b"voice")
+    assert FakeOpenAI.options["base_url"] == "https://gateway.example.com/v1"
+
+
+def test_transcription_requires_api_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="API Key"):
+        TranscriptionService(InMemoryCredentialStore(), tmp_path).transcribe(b"voice")

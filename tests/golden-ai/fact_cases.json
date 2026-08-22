@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"FACT-001","source":["在星云科技担任产品实习生","2025.03-2025.08"],"generated":"2025.03-2025.08 在星云科技担任产品实习生。","allowed":true},
+    {"id":"FACT-002","source":["在星云科技担任产品实习生"],"generated":"在星云科技担任高级产品经理。","allowed":false},
+    {"id":"FACT-003","source":["任务完成率由68%提升至86%"],"generated":"任务完成率由68%提升至86%。","allowed":true},
+    {"id":"FACT-004","source":["任务完成率由68%提升至86%"],"generated":"任务完成率提升至95%。","allowed":false},
+    {"id":"FACT-005","source":["使用OpenAI API和Python"],"generated":"使用OpenAI API和Python完成原型。","allowed":true},
+    {"id":"FACT-006","source":["使用OpenAI API和Python"],"generated":"熟练使用Java和Kubernetes。","allowed":false},
+    {"id":"FACT-007","source":["某某大学 信息管理与信息系统"],"generated":"就读于某某大学信息管理与信息系统专业。","allowed":true},
+    {"id":"FACT-008","source":["某某大学 信息管理与信息系统"],"generated":"毕业于清华大学计算机专业。","allowed":false},
+    {"id":"FACT-009","source":["访谈12名用户"],"generated":"访谈12名用户并归纳高频需求。","allowed":true},
+    {"id":"FACT-010","source":["访谈12名用户"],"generated":"访谈超过100名企业客户。","allowed":false},
+    {"id":"FACT-011","source":["项目获校级优秀结项"],"generated":"项目获校级优秀结项。","allowed":true},
+    {"id":"FACT-012","source":["项目获校级优秀结项"],"generated":"项目获得国家级一等奖。","allowed":false},
+    {"id":"FACT-013","source":["英语可阅读技术文档"],"generated":"英语可阅读技术文档。","allowed":true},
+    {"id":"FACT-014","source":["英语可阅读技术文档"],"generated":"具备英语母语水平。","allowed":false},
+    {"id":"FACT-015","source":["负责需求整理和测试记录"],"generated":"负责需求整理和测试记录。","allowed":true},
+    {"id":"FACT-016","source":["负责需求整理和测试记录"],"generated":"带领20人团队完成商业化落地。","allowed":false},
+    {"id":"FACT-017","source":["2024.10-2025.02 校园智能问答助手"],"generated":"2024.10-2025.02 参与校园智能问答助手。","allowed":true},
+    {"id":"FACT-018","source":["2024.10-2025.02 校园智能问答助手"],"generated":"2023年创建商业智能问答公司。","allowed":false},
+    {"id":"FACT-019","source":["准确率由71%提升至88%"],"generated":"准确率由71%提升至88%。","allowed":true},
+    {"id":"FACT-020","source":["准确率由71%提升至88%"],"generated":"准确率达到99.9%，节省500万元。","allowed":false}
+  ]
+}
+

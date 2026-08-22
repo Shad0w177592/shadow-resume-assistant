@@ -1,0 +1,22 @@
+[
+  {"jd":"负责 AI 产品需求分析。熟悉 Python。","profile":"AI 产品需求分析，使用 Python 完成原型","expect":"evidence"},
+  {"jd":"具备 React 开发经验。","profile":"使用 React 开发桌面端界面","expect":"evidence"},
+  {"jd":"掌握 SQL 和数据建模。","profile":"负责 SQL 数据库设计与建模","expect":"evidence"},
+  {"jd":"本科及以上学历。","profile":"本科，计算机科学专业","expect":"evidence"},
+  {"jd":"有志愿服务经验优先。","profile":"参与校园志愿服务 40 小时","expect":"evidence"},
+  {"jd":"负责用户研究与原型设计。","profile":"完成用户访谈、需求梳理和原型设计","expect":"evidence"},
+  {"jd":"熟悉 FastAPI。","profile":"使用 FastAPI 构建本地接口","expect":"evidence"},
+  {"jd":"熟悉 Electron。","profile":"用 Electron 打包 Windows 应用","expect":"evidence"},
+  {"jd":"具备 Agent 工作流设计能力。","profile":"设计多步骤 Agent 工作流与状态机","expect":"evidence"},
+  {"jd":"有 PDF 文档处理经验优先。","profile":"实现 PDF 文本解析和分类","expect":"evidence"},
+  {"jd":"必须会 Java。","profile":"只使用 Python 和 TypeScript","expect":"missing"},
+  {"jd":"要求三年金融行业经验。","profile":"校园项目与互联网实习","expect":"missing"},
+  {"jd":"熟悉 Kubernetes。","profile":"会 Docker 基础操作","expect":"missing"},
+  {"jd":"具备英语专业八级。","profile":"大学英语四级","expect":"evidence"},
+  {"jd":"有医疗器械注册经验优先。","profile":"电商产品运营","expect":"missing"},
+  {"jd":"熟悉 Rust。","profile":"React 前端开发","expect":"missing"},
+  {"jd":"掌握 Blender 三维建模。","profile":"Figma 界面设计","expect":"missing"},
+  {"jd":"有海外销售经验。","profile":"校园社团宣传","expect":"missing"},
+  {"jd":"具备注册会计师证书。","profile":"计算机二级证书","expect":"evidence"},
+  {"jd":"熟悉嵌入式硬件开发。","profile":"Web 产品原型设计","expect":"missing"}
+]

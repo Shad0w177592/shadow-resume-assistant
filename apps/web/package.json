@@ -1,0 +1,32 @@
+{
+  "name": "@shadow/web",
+  "version": "0.1.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build --configLoader runner",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write src",
+    "test": "vitest run --configLoader runner",
+    "test:e2e": "vitest run src/app.e2e.test.tsx --configLoader runner"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-router-dom": "latest"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "jsdom": "latest",
+    "prettier": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

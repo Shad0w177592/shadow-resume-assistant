@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "strategies": {
+    "star": {"label": "STAR", "applies_to": ["work", "internship", "project", "campus"], "instruction": "按情境、任务、行动、结果组织，但不显示标签。", "forbidden": ["虚构结果"]},
+    "car": {"label": "CAR", "applies_to": ["work", "project"], "instruction": "按挑战、行动、结果组织。", "forbidden": ["虚构挑战"]},
+    "outcome_first": {"label": "成果优先", "applies_to": ["work", "project"], "instruction": "真实成果存在时前置。", "forbidden": ["补造成果"]},
+    "technical": {"label": "技术岗位", "applies_to": ["skills", "project", "work"], "instruction": "突出真实技术选择和职责边界。", "forbidden": ["把使用写成精通"]},
+    "graduate": {"label": "应届生", "applies_to": ["education", "project", "campus"], "instruction": "优先呈现课程项目和校园实践。", "forbidden": ["虚构工作经历"]},
+    "concise": {"label": "简洁表达", "applies_to": ["*"], "instruction": "删除重复和空泛修饰。", "forbidden": ["删除关键事实"]},
+    "jd_keywords": {"label": "JD 关键词", "applies_to": ["*"], "instruction": "仅在证据支持时使用 JD 关键词。", "forbidden": ["复制无证据关键词"]},
+    "quantified": {"label": "量化表达", "applies_to": ["work", "project"], "instruction": "只使用资料中已有数字。", "forbidden": ["生成新数字"]},
+    "ats": {"label": "ATS 友好", "applies_to": ["*"], "instruction": "使用标准栏目名和清晰文本层级。", "forbidden": ["图形化表达关键内容"]}
+  }
+}

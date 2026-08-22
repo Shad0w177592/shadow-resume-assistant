@@ -1,0 +1,13 @@
+{
+  "name": "@shadow/resume-schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "node --check index.mjs",
+    "format": "node --check index.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node --check index.mjs"
+  }
+}
+

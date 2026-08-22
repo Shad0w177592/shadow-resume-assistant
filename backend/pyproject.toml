@@ -1,0 +1,50 @@
+[project]
+name = "shadow-resume-backend"
+version = "0.1.0"
+description = "影子简历助手本地 FastAPI 服务"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.116.1",
+  "uvicorn==0.35.0",
+  "pydantic==2.11.7",
+  "python-multipart==0.0.20",
+  "httpx==0.28.1",
+  "openai==1.99.9",
+  "python-docx==1.2.0",
+  "pypdf==6.0.0",
+  "pdfplumber==0.11.7",
+  "reportlab==4.4.3",
+  "jsonschema==4.25.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.1",
+  "pytest-cov==6.2.1",
+  "ruff==0.12.9",
+  "mypy==1.17.1",
+  "pyinstaller==6.15.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "tests/unit", "tests/integration", "tests/windows"]
+addopts = "--strict-markers --strict-config"
+markers = [
+  "integration: integration tests",
+  "windows: Windows-specific tests",
+  "external: requires external credentials or hardware",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+

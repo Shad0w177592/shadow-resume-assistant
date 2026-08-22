@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shadow-resume.local/schemas/evidence-match/v1",
+  "title": "EvidenceMatchReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_target_id", "matches"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "job_target_id": { "type": "string", "format": "uuid" },
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "status", "reason", "profile_entry_ids"],
+        "properties": {
+          "requirement_id": { "type": "string" },
+          "status": { "enum": ["sufficient", "partial", "missing", "irrelevant"] },
+          "reason": { "type": "string" },
+          "profile_entry_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+        }
+      }
+    }
+  }
+}
+
