@@ -109,7 +109,7 @@ def test_configured_workflow_respects_order_columns_modes_and_redacts_task_paylo
         assert "private@example.com" not in serialized_task
 
 
-def test_must_include_conflict_and_generation_before_analysis_are_blocked(
+def test_must_include_conflict_and_generation_automatically_analyzes(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
@@ -129,10 +129,12 @@ def test_must_include_conflict_and_generation_before_analysis_are_blocked(
             headers=HEADERS,
             json={"jd_text": "岗位要求", "title": None, "company": None},
         ).json()
-        before = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
-        assert before.status_code == 422
-        assert "岗位分析" in before.json()["detail"]
-        client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS)
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200
+        report = client.get(
+            f"/api/jobs/{job['id']}/match-report", headers=HEADERS
+        ).json()
+        assert report["requirements"]
         config = client.get(
             f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
         ).json()["config"]
