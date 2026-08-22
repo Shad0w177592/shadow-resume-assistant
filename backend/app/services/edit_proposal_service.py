@@ -10,7 +10,7 @@ from app.domain.resume import ResumeDocument
 from app.persistence.database import Database, utc_now
 from app.security.pii import redact_text_for_ai
 from app.services.ai_schemas import EDIT_REWRITE_SCHEMA
-from app.services.fact_checker import check_hard_facts
+from app.services.fact_checker import check_hard_facts, explain_violations
 from app.services.generation_service import GenerationService
 from app.services.openai_provider import OpenAITextProvider
 from app.services.profile_service import ProfileService
@@ -40,7 +40,13 @@ class EditProposalService:
         source_texts = []
         for entry_id in evidence_ids:
             entry = self.profiles.get_entry(entry_id)
-            source_texts.append(json.dumps(entry["payload"], ensure_ascii=False))
+            source_texts.append(
+                json.dumps(
+                    {"title": entry["title"], "payload": entry["payload"]},
+                    ensure_ascii=False,
+                )
+            )
+        source_texts.append(before)
         if self.provider:
             result = self.provider.complete_json(
                 workflow="paragraph_rewrite",
@@ -60,7 +66,8 @@ class EditProposalService:
             after, reason = self._rewrite(before, instruction)
         fact_result = check_hard_facts(source_texts, after)
         if not fact_result.allowed:
-            raise ValueError(f"修改建议包含无证据事实：{','.join(fact_result.violations)}")
+            detail = explain_violations(fact_result.violations)
+            raise ValueError(f"修改建议包含无依据内容：{detail}")
         proposal_id = str(uuid4())
         now = utc_now()
         payload = {

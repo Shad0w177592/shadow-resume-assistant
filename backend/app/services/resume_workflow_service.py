@@ -16,7 +16,7 @@ from app.domain.resume import (
 from app.persistence.database import Database, utc_now
 from app.security.pii import redact_payload_for_ai, redact_personal_info
 from app.services.ai_schemas import RESUME_REWRITE_SCHEMA
-from app.services.fact_checker import check_hard_facts
+from app.services.fact_checker import check_hard_facts, explain_violations
 from app.services.generation_service import SECTION_TITLES, GenerationService
 from app.services.job_analysis_service import JobAnalysisService
 from app.services.job_service import JobService
@@ -93,13 +93,20 @@ class ResumeWorkflowService:
                 for block in section.blocks:
                     for paragraph in block.paragraphs:
                         source_texts = [
-                            json.dumps(entry_by_id[str(source_id)]["payload"], ensure_ascii=False)
+                            json.dumps(
+                                {
+                                    "title": entry_by_id[str(source_id)]["title"],
+                                    "payload": entry_by_id[str(source_id)]["payload"],
+                                },
+                                ensure_ascii=False,
+                            )
                             for source_id in paragraph.source_entry_ids
                         ]
                         result = check_hard_facts(source_texts, paragraph.text)
                         violations.extend(result.violations)
             if violations:
-                raise ValueError(f"事实检查未通过：{','.join(sorted(set(violations)))}")
+                detail = explain_violations(violations)
+                raise ValueError(f"事实检查未通过：{detail}。请检查生成内容或补充真实资料")
             steps["DETERMINISTIC_FACT_CHECK"] = "completed"
 
             # V1 mock provider performs no semantic rewrite;
