@@ -51,7 +51,6 @@ test("a job can generate a read-only evidence-backed draft preview", async () =>
   const request = vi.fn(async (path: string, method = "GET") => {
     if (path === "/api/jobs" && method === "GET") return [];
     if (path === "/api/jobs" && method === "POST") return job;
-    if (path === "/api/jobs/job-1/analyze") return { stale: false, requirements: [{ id: "r-1", requirement_type: "must_have", summary: "负责 Agent 产品", source_text: "负责 Agent 产品", status: "full", reason: "资料中包含 Agent 产品证据", evidence: { entry_id: "entry-1", title: "影子简历助手", payload: {} } }] };
     if (path === "/api/jobs/job-1/generate") return { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", title: "项目经历", blocks: [{ block_id: "block-1", heading: "影子简历助手", meta: "", paragraphs: [{ paragraph_id: "p-1", text: "完成本地简历工作流", source_entry_ids: ["entry-1"] }] }] }] } };
     if (path === "/api/jobs/job-1" && method === "DELETE") return null;
     throw new Error(`unexpected ${method} ${path}`);
@@ -71,12 +70,11 @@ test("a job can generate a read-only evidence-backed draft preview", async () =>
   await user.type(screen.getByLabelText("岗位名称（选填）"), "AI Agent 产品经理");
   await user.type(screen.getByLabelText("岗位 JD"), "负责 Agent 产品");
   await user.click(screen.getByRole("button", { name: "保存岗位" }));
-  await user.click(await screen.findByRole("button", { name: "分析匹配" }));
-  expect(await screen.findByText("充分匹配")).toBeInTheDocument();
-  expect(screen.getByText("证据：影子简历助手")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "分析匹配" })).not.toBeInTheDocument();
   await user.click(await screen.findByRole("button", { name: "生成草稿" }));
   expect(await screen.findByText("完成本地简历工作流")).toBeInTheDocument();
   expect(screen.getByText("杨丰铭")).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith("/api/jobs/job-1/generate", "POST", undefined);
   const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
   await user.click(screen.getByRole("button", { name: "删除" }));
   expect(request).not.toHaveBeenCalledWith("/api/jobs/job-1", "DELETE", undefined);

@@ -18,6 +18,7 @@ from app.security.pii import redact_payload_for_ai, redact_personal_info
 from app.services.ai_schemas import RESUME_REWRITE_SCHEMA
 from app.services.fact_checker import check_hard_facts
 from app.services.generation_service import SECTION_TITLES, GenerationService
+from app.services.job_analysis_service import JobAnalysisService
 from app.services.job_service import JobService
 from app.services.openai_provider import AIProviderError, OpenAITextProvider
 from app.services.profile_service import ProfileService
@@ -50,15 +51,17 @@ class ResumeWorkflowService:
         steps = {name: "pending" for name in WORKFLOW_STEPS}
         self._save_task(task_id, job_id, "running", 0, steps)
         try:
-            self.jobs.get(job_id)
+            job = self.jobs.get(job_id)
             config = self.configs.get(job_id)["config"]
             steps["VALIDATE_INPUT"] = "running"
-            requirements = self._requirements(job_id)
-            if not requirements:
-                raise ValueError("请先完成岗位分析，再生成简历")
             entries = self.profiles.list_entries()
             if not entries:
                 raise ValueError("请先填写至少一条有内容的个人资料")
+            analyzer = JobAnalysisService(self.database, self.provider)
+            report = analyzer.report(job["id"])
+            if not report["requirements"] or report["stale"]:
+                analyzer.analyze(job["id"])
+            requirements = self._requirements(job_id)
             self.configs.validate(config)
             self._validate_entry_modes(config, entries)
             steps["VALIDATE_INPUT"] = "completed"

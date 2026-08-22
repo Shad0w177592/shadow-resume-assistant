@@ -83,14 +83,16 @@ def test_job_crud_draft_evidence_and_job_isolation(monkeypatch, tmp_path: Path) 
         second = add_job(client, "乙公司")
         copied = client.post(f"/api/jobs/{first['id']}/duplicate", headers=HEADERS)
         assert copied.status_code == 201
-        client.post(f"/api/jobs/{first['id']}/analyze", headers=HEADERS)
-        client.post(f"/api/jobs/{second['id']}/analyze", headers=HEADERS)
         first_draft = client.post(
             f"/api/jobs/{first['id']}/generate", headers=HEADERS
         ).json()
         second_draft = client.post(
             f"/api/jobs/{second['id']}/generate", headers=HEADERS
         ).json()
+        generated_report = client.get(
+            f"/api/jobs/{first['id']}/match-report", headers=HEADERS
+        ).json()
+        assert generated_report["requirements"]
         assert first_draft["id"] != second_draft["id"]
         paragraphs = [
             paragraph
