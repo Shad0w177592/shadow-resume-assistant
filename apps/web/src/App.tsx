@@ -9,11 +9,13 @@ import { ProfilePage } from "./pages/Profile";
 import { JobsPage } from "./pages/Jobs";
 import { ImportPage } from "./pages/Import";
 import { WorkbenchPage } from "./pages/Workbench";
+import { WorkbenchLandingPage } from "./pages/WorkbenchLanding";
 
 const pages = [
   ["/", "首页", "开始整理资料并生成第一份岗位简历。"],
   ["/profile", "个人资料", "集中维护个人信息、经历、技能和成果。"],
   ["/jobs", "目标岗位", "粘贴岗位描述并查看证据匹配。"],
+  ["/workbench", "简历工作台", "选择岗位并生成、修改和导出简历。"],
   ["/settings", "设置", "管理 AI 服务、本地数据和软件信息。"],
 ] as const;
 
@@ -59,6 +61,7 @@ export function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/imports" element={<ImportPage />} />
+        <Route path="/workbench" element={<WorkbenchLandingPage />} />
         <Route path="/workbench/:jobId" element={<WorkbenchPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
