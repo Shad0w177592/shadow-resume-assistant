@@ -460,18 +460,7 @@ class ResumeWorkflowService:
                 continue
             position = duplicate_positions[duplicate_key]
             current = deduplicated[position]
-            current_priority = (
-                current["selection_mode"] == "must_include",
-                current.get("importance", 3),
-                current["relevance_score"],
-            )
-            candidate_priority = (
-                item["selection_mode"] == "must_include",
-                item.get("importance", 3),
-                item["relevance_score"],
-            )
-            if candidate_priority > current_priority:
-                deduplicated[position] = item
+            deduplicated[position] = self._merge_duplicate_entries(current, item)
             warnings.append(f"已合并重复导入经历：{item['title'] or item['id']}")
         selected = deduplicated
         section_order = {section["section_key"]: section["order"] for section in config["sections"]}
@@ -494,7 +483,7 @@ class ResumeWorkflowService:
     @staticmethod
     def _imported_duplicate_key(entry: dict[str, Any]) -> tuple[str, str, str] | None:
         payload = entry.get("payload")
-        if not isinstance(payload, dict) or not isinstance(payload.get("source"), dict):
+        if not isinstance(payload, dict):
             return None
 
         def normalize(value: Any) -> str:
@@ -502,7 +491,38 @@ class ResumeWorkflowService:
 
         title = normalize(entry.get("title"))
         content = normalize(payload.get("content"))
-        return (str(entry.get("section_key") or ""), title, content) if title or content else None
+        if content:
+            return (str(entry.get("section_key") or ""), "content", content)
+        return (str(entry.get("section_key") or ""), "title", title) if title else None
+
+    @staticmethod
+    def _merge_duplicate_entries(
+        current: dict[str, Any], candidate: dict[str, Any]
+    ) -> dict[str, Any]:
+        def has_source(item: dict[str, Any]) -> bool:
+            payload = item.get("payload")
+            return isinstance(payload, dict) and isinstance(payload.get("source"), dict)
+
+        canonical = candidate if has_source(candidate) and not has_source(current) else current
+        merged = dict(canonical)
+        merged["payload"] = dict(canonical.get("payload") or {})
+        merged["selection_mode"] = (
+            "must_include"
+            if "must_include"
+            in {current.get("selection_mode"), candidate.get("selection_mode")}
+            else canonical.get("selection_mode", "ai_decide")
+        )
+        merged["importance"] = max(
+            int(current.get("importance", 3)), int(candidate.get("importance", 3))
+        )
+        merged["relevance_score"] = max(
+            int(current.get("relevance_score", 0)),
+            int(candidate.get("relevance_score", 0)),
+        )
+        merged["source_index"] = min(
+            int(current.get("source_index", 0)), int(candidate.get("source_index", 0))
+        )
+        return merged
 
     @staticmethod
     def _apply_section_limits(

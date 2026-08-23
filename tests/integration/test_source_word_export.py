@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from copy import deepcopy
 from pathlib import Path
 from zipfile import ZipFile
@@ -410,7 +411,7 @@ def test_reimported_same_word_generates_one_copy_and_keeps_source_format(
 
     app = create_app(tmp_path / "duplicate-data", InMemoryCredentialStore())
     with TestClient(app) as client:
-        for _ in range(2):
+        for import_index in range(2):
             imported = client.post(
                 "/api/imports/from-path", headers=HEADERS, json={"path": str(source)}
             ).json()
@@ -425,6 +426,18 @@ def test_reimported_same_word_generates_one_copy_and_keeps_source_format(
                 },
             )
             assert confirmed.status_code == 200, confirmed.text
+            if import_index == 0:
+                with app.state.services.database.connect() as connection:
+                    row = connection.execute(
+                        "SELECT id, payload_json FROM profile_section_entry "
+                        "WHERE section_key='work' ORDER BY created_at LIMIT 1"
+                    ).fetchone()
+                    payload = json.loads(row[1])
+                    payload.pop("source", None)
+                    connection.execute(
+                        "UPDATE profile_section_entry SET title=?, payload_json=? WHERE id=?",
+                        ("唯一公", json.dumps(payload, ensure_ascii=False), row[0]),
+                    )
 
         job = client.post(
             "/api/jobs",
@@ -440,16 +453,12 @@ def test_reimported_same_word_generates_one_copy_and_keeps_source_format(
             if section["section_key"] == "work"
         )
         assert [block["heading"] for block in work["blocks"]] == ["唯一公司"]
-        entries = client.get("/api/profile", headers=HEADERS).json()["entries"]
         original_source_id = work["blocks"][0]["paragraphs"][0]["source_entry_ids"][0]
-        canonical_source_id = next(
-            entry["id"] for entry in entries if entry["id"] != original_source_id
-        )
         duplicate = deepcopy(work["blocks"][0])
         duplicate["block_id"] = "old-duplicate-block"
         duplicate["paragraphs"][0]["paragraph_id"] = "old-duplicate-paragraph"
         duplicate["paragraphs"][0]["text"] = "唯一工作内容（保留较新编辑）"
-        duplicate["paragraphs"][0]["source_entry_ids"] = [canonical_source_id]
+        duplicate["paragraphs"][0]["source_entry_ids"] = [original_source_id]
         work["blocks"].append(duplicate)
         saved = client.put(
             f"/api/jobs/{job['id']}/draft",
