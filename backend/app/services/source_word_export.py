@@ -91,12 +91,25 @@ class SourceWordExport:
         unused = {entry["id"] for entry in source_entries}
         selected: dict[str, dict[str, Any]] = {}
         selected_order: list[str] = []
+        selected_by_signature: dict[tuple[str, tuple[str, ...]], str] = {}
         novel_by_section: defaultdict[str, list[dict[str, str]]] = defaultdict(list)
         for block in draft_blocks:
             match = self._direct_match(block, entry_by_id, by_signature, unused)
             if match is None:
                 match = self._fuzzy_match(block, source_entries, unused)
             if match is None:
+                duplicate_id = self._selected_duplicate_id(
+                    block, entry_by_id, selected_by_signature, selected
+                )
+                if duplicate_id is not None:
+                    if duplicate_id in block["source_ids"]:
+                        selected[duplicate_id] = {
+                            "section_key": block["section_key"],
+                            "heading": block["heading"],
+                            "meta": block["meta"],
+                            "text": block["text"],
+                        }
+                    continue
                 if block["section_key"] == "skills":
                     novel_by_section["skills"].append(
                         {
@@ -114,6 +127,9 @@ class SourceWordExport:
                 "meta": block["meta"],
                 "text": block["text"],
             }
+            signature = self._source_signature(match)
+            if signature is not None:
+                selected_by_signature[signature] = match["id"]
 
         locator = self._summary_locator(
             chosen["id"],
@@ -123,16 +139,14 @@ class SourceWordExport:
         )
         summary = None
         if summary_section is not None:
+            summary_text = "\n".join(
+                paragraph.text for block in summary_section.blocks for paragraph in block.paragraphs
+            ).strip()
             if locator is None:
-                return None
-            summary = {
-                "source": locator,
-                "text": "\n".join(
-                    paragraph.text
-                    for block in summary_section.blocks
-                    for paragraph in block.paragraphs
-                ).strip(),
-            }
+                if summary_text:
+                    return None
+            else:
+                summary = {"source": locator, "text": summary_text}
         elif locator is not None:
             legacy_summary = document.personal_info.headline.strip()
             summary = {"source": locator, "text": legacy_summary or None}
@@ -146,6 +160,54 @@ class SourceWordExport:
             "novel_by_section": dict(novel_by_section),
             "summary": summary,
         }
+
+    def expects_source_word(self, document: ResumeDocument) -> bool:
+        source_ids = {
+            source_id for block in self._draft_blocks(document) for source_id in block["source_ids"]
+        }
+        document_ids = set()
+        with self.database.connect() as connection:
+            if source_ids:
+                rows = [
+                    row
+                    for source_id in source_ids
+                    if (
+                        row := connection.execute(
+                            "SELECT payload_json FROM profile_section_entry WHERE id=?",
+                            (source_id,),
+                        ).fetchone()
+                    )
+                ]
+                for row in rows:
+                    payload = json.loads(row[0])
+                    source = (
+                        payload.get("source") if isinstance(payload.get("source"), dict) else {}
+                    )
+                    if source.get("document_id"):
+                        document_ids.add(str(source["document_id"]))
+            profile_row = connection.execute(
+                "SELECT payload_json FROM user_profile ORDER BY updated_at DESC LIMIT 1"
+            ).fetchone()
+            if profile_row and any(
+                section.section_key == "summary" for section in document.sections
+            ):
+                profile = json.loads(profile_row[0])
+                summary_source = profile.get("_summary_source")
+                if isinstance(summary_source, dict) and summary_source.get("document_id"):
+                    document_ids.add(str(summary_source["document_id"]))
+            if not document_ids:
+                return False
+            rows = [
+                row
+                for document_id in document_ids
+                if (
+                    row := connection.execute(
+                        "SELECT original_name FROM source_document WHERE id=?",
+                        (document_id,),
+                    ).fetchone()
+                )
+            ]
+        return any(str(row[0]).lower().endswith(".docx") for row in rows)
 
     def write(self, resolved: dict[str, Any], target: Path) -> None:
         source_path = Path(resolved["path"])
@@ -317,6 +379,23 @@ class SourceWordExport:
             if section.section_key != "summary"
             for block in section.blocks
         ]
+
+    @classmethod
+    def _selected_duplicate_id(
+        cls, block, entry_by_id, selected_by_signature, selected
+    ) -> str | None:
+        for source_id in block["source_ids"]:
+            entry = entry_by_id.get(source_id)
+            if entry is None:
+                continue
+            signature = cls._source_signature(entry)
+            selected_id = selected_by_signature.get(signature)
+            if selected_id is None:
+                continue
+            existing = selected[selected_id]
+            if existing["section_key"] == block["section_key"]:
+                return selected_id
+        return None
 
     @classmethod
     def _direct_match(cls, block, entry_by_id, by_signature, unused):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from typing import Any
 from uuid import uuid4
@@ -383,6 +384,31 @@ class ResumeWorkflowService:
             item["relevance_score"] = evidence_scores[entry["id"]]
             item["source_index"] = source_index
             selected.append(item)
+        deduplicated = []
+        duplicate_positions: dict[tuple[str, str, str], int] = {}
+        for item in selected:
+            duplicate_key = self._imported_duplicate_key(item)
+            if duplicate_key is None or duplicate_key not in duplicate_positions:
+                if duplicate_key is not None:
+                    duplicate_positions[duplicate_key] = len(deduplicated)
+                deduplicated.append(item)
+                continue
+            position = duplicate_positions[duplicate_key]
+            current = deduplicated[position]
+            current_priority = (
+                current["selection_mode"] == "must_include",
+                current.get("importance", 3),
+                current["relevance_score"],
+            )
+            candidate_priority = (
+                item["selection_mode"] == "must_include",
+                item.get("importance", 3),
+                item["relevance_score"],
+            )
+            if candidate_priority > current_priority:
+                deduplicated[position] = item
+            warnings.append(f"已合并重复导入经历：{item['title'] or item['id']}")
+        selected = deduplicated
         section_order = {section["section_key"]: section["order"] for section in config["sections"]}
         rewrite_sections = set(config.get("rewrite_sections") or [])
         selected.sort(
@@ -399,6 +425,19 @@ class ResumeWorkflowService:
             )
         )
         return selected, warnings
+
+    @staticmethod
+    def _imported_duplicate_key(entry: dict[str, Any]) -> tuple[str, str, str] | None:
+        payload = entry.get("payload")
+        if not isinstance(payload, dict) or not isinstance(payload.get("source"), dict):
+            return None
+
+        def normalize(value: Any) -> str:
+            return re.sub(r"\s+", "", str(value or "")).lower()
+
+        title = normalize(entry.get("title"))
+        content = normalize(payload.get("content"))
+        return (str(entry.get("section_key") or ""), title, content) if title or content else None
 
     @staticmethod
     def _apply_section_limits(

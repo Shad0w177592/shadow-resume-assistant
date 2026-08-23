@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -393,3 +394,145 @@ def test_duplicate_word_imports_merge_unique_source_blocks() -> None:
         "chosen-skills",
         "old-campus",
     ]
+
+
+def test_reimported_same_word_generates_one_copy_and_keeps_source_format(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "source-word-export")
+    source = tmp_path / "重复导入简历.docx"
+    original = Document()
+    original.sections[0].header.paragraphs[0].text = "不可丢失的原页眉"
+    original.add_paragraph("工作经历")
+    _experience(original, "唯一公司", "唯一工作内容")
+    original.save(source)
+    source_parts = _package_hashes(source)
+
+    app = create_app(tmp_path / "duplicate-data", InMemoryCredentialStore())
+    with TestClient(app) as client:
+        for _ in range(2):
+            imported = client.post(
+                "/api/imports/from-path", headers=HEADERS, json={"path": str(source)}
+            ).json()
+            confirmed = client.post(
+                f"/api/imports/{imported['id']}/confirm",
+                headers=HEADERS,
+                json={
+                    "decisions": [
+                        {"candidate_id": item["id"], "action": "accept"}
+                        for item in imported["candidates"]
+                    ]
+                },
+            )
+            assert confirmed.status_code == 200, confirmed.text
+
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": "工作经验", "title": "岗位", "company": "公司"},
+        ).json()
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+        generated_body = generated.json()
+        work = next(
+            section
+            for section in generated_body["document"]["sections"]
+            if section["section_key"] == "work"
+        )
+        assert [block["heading"] for block in work["blocks"]] == ["唯一公司"]
+        entries = client.get("/api/profile", headers=HEADERS).json()["entries"]
+        original_source_id = work["blocks"][0]["paragraphs"][0]["source_entry_ids"][0]
+        canonical_source_id = next(
+            entry["id"] for entry in entries if entry["id"] != original_source_id
+        )
+        duplicate = deepcopy(work["blocks"][0])
+        duplicate["block_id"] = "old-duplicate-block"
+        duplicate["paragraphs"][0]["paragraph_id"] = "old-duplicate-paragraph"
+        duplicate["paragraphs"][0]["text"] = "唯一工作内容（保留较新编辑）"
+        duplicate["paragraphs"][0]["source_entry_ids"] = [canonical_source_id]
+        work["blocks"].append(duplicate)
+        saved = client.put(
+            f"/api/jobs/{job['id']}/draft",
+            headers=HEADERS,
+            json={"document": generated_body["document"]},
+        )
+        assert saved.status_code == 200, saved.text
+        exported = client.post(
+            f"/api/jobs/{job['id']}/export",
+            headers=HEADERS,
+            json={"filename": "重复导入保真", "formats": ["docx"]},
+        )
+        assert exported.status_code == 200, exported.text
+        assert exported.json()["word_mode"] == "source_format"
+        target = Path(exported.json()["files"][0])
+
+    assert _package_hashes(target) == source_parts
+    text = "\n".join(paragraph.text for paragraph in Document(target).paragraphs)
+    assert text.count("唯一工作内容") == 1
+    assert "唯一工作内容（保留较新编辑）" in text
+
+
+def test_imported_word_never_silently_falls_back_to_generated_template(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "source-word-export")
+    source = tmp_path / "必须保留格式.docx"
+    original = Document()
+    original.add_paragraph("工作经历")
+    _experience(original, "原公司", "原内容")
+    original.save(source)
+
+    app = create_app(tmp_path / "no-fallback-data", InMemoryCredentialStore())
+    with TestClient(app) as client:
+        imported = client.post(
+            "/api/imports/from-path", headers=HEADERS, json={"path": str(source)}
+        ).json()
+        client.post(
+            f"/api/imports/{imported['id']}/confirm",
+            headers=HEADERS,
+            json={
+                "decisions": [
+                    {"candidate_id": item["id"], "action": "accept"}
+                    for item in imported["candidates"]
+                ]
+            },
+        )
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": "工作经验", "title": "岗位", "company": "公司"},
+        ).json()
+        generated = client.post(
+            f"/api/jobs/{job['id']}/generate", headers=HEADERS
+        ).json()
+        generated["document"]["sections"][0]["blocks"].append(
+            {
+                "block_id": "unmapped-block",
+                "heading": "原 Word 中不存在的公司",
+                "meta": "",
+                "paragraphs": [
+                    {
+                        "paragraph_id": "unmapped-paragraph",
+                        "text": "无法安全映射到原格式的内容",
+                        "source_entry_ids": [],
+                        "risk_flags": [],
+                    }
+                ],
+            }
+        )
+        saved = client.put(
+            f"/api/jobs/{job['id']}/draft",
+            headers=HEADERS,
+            json={"document": generated["document"]},
+        )
+        assert saved.status_code == 200, saved.text
+        exported = client.post(
+            f"/api/jobs/{job['id']}/export",
+            headers=HEADERS,
+            json={"filename": "不得回退", "formats": ["docx"]},
+        )
+        assert exported.status_code == 422
+        assert "无法安全套用原 Word 排版" in exported.json()["detail"]
+        assert not (
+            tmp_path / "no-fallback-data" / "exports" / "不得回退.docx"
+        ).exists()

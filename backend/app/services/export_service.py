@@ -25,7 +25,7 @@ class ExportService:
         warnings = self.preflight(draft["id"], document)
         if warnings:
             raise ValueError("；".join(warnings))
-        return self._write(document, filename, formats, self.source_word.resolve(document))
+        return self._write_resolved(document, filename, formats)
 
     def export_version(self, version_id: str, filename: str, formats: list[str]) -> dict[str, Any]:
         version = VersionService(self.database).get(version_id)
@@ -33,7 +33,18 @@ class ExportService:
         warnings = self._document_warnings(document)
         if warnings:
             raise ValueError("；".join(warnings))
-        return self._write(document, filename, formats, self.source_word.resolve(document))
+        return self._write_resolved(document, filename, formats)
+
+    def _write_resolved(
+        self, document: ResumeDocument, filename: str, formats: list[str]
+    ) -> dict[str, Any]:
+        source_word = self.source_word.resolve(document)
+        if source_word is None and self.source_word.expects_source_word(document):
+            raise ValueError(
+                "无法安全套用原 Word 排版，本次未导出，避免照片、字体、间距或栏目顺序被改变。"
+                "请重新导入原 Word 后再生成，或检查新增栏目是否能对应原文件。"
+            )
+        return self._write(document, filename, formats, source_word)
 
     def _write(
         self,
