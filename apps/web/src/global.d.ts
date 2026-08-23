@@ -8,6 +8,7 @@ declare global {
       pickDocument(): Promise<string | null>;
       pickPhoto?(): Promise<string | null>;
       pickBackup(): Promise<string | null>;
+      changeDataDirectory?(): Promise<{ dataDirectory: string; backupPath: string | null; oldDirectory?: string; oldDirectoryPreserved: boolean } | null>;
       transcribeAudio(bytes: ArrayBuffer, mediaType?: string): Promise<{ text: string }>;
       platform: string;
     };

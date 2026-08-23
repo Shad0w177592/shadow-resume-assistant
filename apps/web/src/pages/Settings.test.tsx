@@ -22,6 +22,7 @@ test("backup restore and exact clear confirmation are available from settings", 
   window.shadowDesktop = {
     platform: "win32", health: async () => ({ status: "ok" }), pickDocument: async () => null,
     pickBackup: async () => "C:\\backup.zip", transcribeAudio: async () => ({ text: "" }),
+    changeDataDirectory: async () => ({ dataDirectory: "D:\\影子简历数据", backupPath: "C:\\data\\backups\\before-move.zip", oldDirectory: "C:\\data", oldDirectoryPreserved: true }),
     request: request as unknown as <T>(path: string, method?: string, body?: unknown) => Promise<T>,
   };
   const user = userEvent.setup();
@@ -37,6 +38,9 @@ test("backup restore and exact clear confirmation are available from settings", 
     base_url: "https://gateway.example.com/v1",
     voice_device_id: null,
   });
+  await user.click(screen.getByRole("button", { name: "更改保存位置" }));
+  expect(await screen.findByText("D:\\影子简历数据")).toBeInTheDocument();
+  expect(await screen.findByText(/旧目录仍保留为安全副本/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "导出全部备份" }));
   expect(await screen.findByText(/backup.zip/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "从备份恢复" }));

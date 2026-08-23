@@ -2,6 +2,11 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { createSidecarSupervisor, waitForUrl } = require("./sidecar.cjs");
 const { validateWebBundle } = require("./web-bundle.cjs");
+const {
+  copyManagedData,
+  readConfiguredDataDirectory,
+  writeConfiguredDataDirectory,
+} = require("./data-directory.cjs");
 
 const appRoot = path.resolve(__dirname, "..", "..", "..");
 let sidecarSupervisor;
@@ -17,14 +22,13 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 
 async function createWindow() {
-  sidecarSupervisor = createSidecarSupervisor({
-    appRoot,
-    resourcesPath: process.resourcesPath,
-    packaged: app.isPackaged,
-    dataDir: app.getPath("userData"),
-  }, {
-    onError: (error) => console.error("Failed to restart backend", error.message),
-  });
+  const controlDirectory = app.getPath("userData");
+  let activeDataDirectory = readConfiguredDataDirectory(controlDirectory, controlDirectory);
+  const makeSidecarSupervisor = (dataDir) => createSidecarSupervisor(
+    { appRoot, resourcesPath: process.resourcesPath, packaged: app.isPackaged, dataDir },
+    { onError: (error) => console.error("Failed to restart backend", error.message) },
+  );
+  sidecarSupervisor = makeSidecarSupervisor(activeDataDirectory);
   await sidecarSupervisor.start();
   if (process.env.SHADOW_SMOKE_TEST === "1") {
     await sidecarSupervisor.stop();
@@ -79,6 +83,49 @@ async function createWindow() {
       filters: [{ name: "备份文件", extensions: ["zip"] }],
     });
     return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle("data:change-directory", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "选择新的本地数据文件夹",
+      properties: ["openDirectory", "createDirectory"],
+      buttonLabel: "使用这个文件夹",
+    });
+    if (result.canceled) return null;
+    const targetDirectory = path.resolve(result.filePaths[0]);
+    if (targetDirectory === activeDataDirectory) {
+      return { dataDirectory: activeDataDirectory, backupPath: null, oldDirectoryPreserved: true };
+    }
+
+    const backupResponse = await fetch(`${sidecarSupervisor.current.baseUrl}/api/backups`, {
+      method: "POST",
+      headers: { "x-shadow-session": sidecarSupervisor.current.token },
+    });
+    const backup = await backupResponse.json().catch(() => null);
+    if (!backupResponse.ok) {
+      throw new Error(backup?.detail || "切换前自动备份失败，数据目录未改变");
+    }
+
+    const previousDirectory = activeDataDirectory;
+    await sidecarSupervisor.stop();
+    try {
+      copyManagedData(previousDirectory, targetDirectory);
+      writeConfiguredDataDirectory(controlDirectory, targetDirectory);
+      activeDataDirectory = targetDirectory;
+      sidecarSupervisor = makeSidecarSupervisor(activeDataDirectory);
+      await sidecarSupervisor.start();
+      return {
+        dataDirectory: activeDataDirectory,
+        backupPath: backup.path,
+        oldDirectory: previousDirectory,
+        oldDirectoryPreserved: true,
+      };
+    } catch (error) {
+      writeConfiguredDataDirectory(controlDirectory, previousDirectory);
+      activeDataDirectory = previousDirectory;
+      sidecarSupervisor = makeSidecarSupervisor(activeDataDirectory);
+      await sidecarSupervisor.start();
+      throw error;
+    }
   });
   ipcMain.handle("audio:transcribe", async (_event, request) => {
     const bytes = request?.bytes;
