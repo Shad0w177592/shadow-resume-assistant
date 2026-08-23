@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
+from copy import deepcopy
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -25,76 +29,122 @@ class SourceWordExport:
         self.paths = paths
 
     def resolve(self, document: ResumeDocument) -> dict[str, Any] | None:
-        ordered_ids = [
-            str(source_id)
-            for section in document.sections
-            for block in section.blocks
-            for paragraph in block.paragraphs
-            for source_id in paragraph.source_entry_ids
-        ]
-        if not ordered_ids:
-            return None
-        unique_ids = list(dict.fromkeys(ordered_ids))
+        draft_blocks = self._draft_blocks(document)
+        summary_section = next(
+            (section for section in document.sections if section.section_key == "summary"),
+            None,
+        )
         with self.database.connect() as connection:
-            available_rows = connection.execute(
-                "SELECT id, section_key, payload_json FROM profile_section_entry "
-                "WHERE deleted_at IS NULL"
+            entry_rows = connection.execute(
+                "SELECT id, section_key, title, payload_json, created_at "
+                "FROM profile_section_entry WHERE deleted_at IS NULL ORDER BY created_at, id"
             ).fetchall()
-        wanted = set(unique_ids)
-        rows = [row for row in available_rows if row[0] in wanted]
-        if len(rows) != len(unique_ids):
-            return None
-        entries = {row[0]: self._entry(row) for row in rows}
-        document_ids = {
-            entry["source"].get("document_id")
-            for entry in entries.values()
-            if entry["source"].get("document_id")
-        }
-        if len(document_ids) != 1 or any(not entry["source"] for entry in entries.values()):
-            return None
-        source_document_id = str(next(iter(document_ids)))
-        with self.database.connect() as connection:
-            source = connection.execute(
-                "SELECT managed_file_id, original_name FROM source_document WHERE id=?",
-                (source_document_id,),
+            document_rows = connection.execute(
+                "SELECT id, managed_file_id, original_name, created_at "
+                "FROM source_document ORDER BY created_at, id"
+            ).fetchall()
+            profile_row = connection.execute(
+                "SELECT payload_json FROM user_profile ORDER BY updated_at DESC LIMIT 1"
             ).fetchone()
-            all_rows = connection.execute(
-                "SELECT id, section_key, payload_json FROM profile_section_entry "
-                "WHERE deleted_at IS NULL ORDER BY created_at, id"
+            summary_rows = connection.execute(
+                "SELECT source_document_id, source_locator_json FROM import_candidate "
+                "WHERE section_key='summary' AND status='accepted' ORDER BY rowid"
             ).fetchall()
-        if source is None or not str(source[1]).lower().endswith(".docx"):
+        entries = [self._entry(row) for row in entry_rows]
+        entry_by_id = {entry["id"]: entry for entry in entries}
+        documents = self._source_documents(document_rows)
+        if not documents:
             return None
-        matches = list(self.paths.imports.glob(f"{source[0]}.docx"))
-        if len(matches) != 1:
+        linked_document_ids = {
+            entry_by_id[source_id]["source"].get("document_id")
+            for block in draft_blocks
+            for source_id in block["source_ids"]
+            if source_id in entry_by_id and entry_by_id[source_id]["source"].get("document_id")
+        }
+        personal_info = json.loads(profile_row[0]) if profile_row else {}
+        summary_source = (
+            personal_info.get("_summary_source")
+            if isinstance(personal_info.get("_summary_source"), dict)
+            else {}
+        )
+        if summary_source.get("document_id"):
+            linked_document_ids.add(summary_source["document_id"])
+        chosen, compatible_ids = self._choose_document(documents, entries, linked_document_ids)
+        compatible_entries = [
+            entry
+            for entry in entries
+            if entry["source"].get("document_id") in compatible_ids
+            and not self._looks_like_personal_info(entry)
+        ]
+        source_entries = self._deduplicate_source_entries(
+            compatible_entries,
+            chosen["id"],
+        )
+        if not source_entries and draft_blocks:
             return None
-        source_entries = []
-        for row in all_rows:
-            entry = self._entry(row)
-            if entry["source"].get("document_id") == source_document_id:
-                source_entries.append(entry)
-        block_by_entry = {}
-        for section in document.sections:
-            for block in section.blocks:
-                source_ids = [
-                    str(source_id)
+
+        by_signature = {
+            self._source_signature(entry): entry
+            for entry in source_entries
+            if self._source_signature(entry) is not None
+        }
+        unused = {entry["id"] for entry in source_entries}
+        selected: dict[str, dict[str, Any]] = {}
+        selected_order: list[str] = []
+        novel_by_section: defaultdict[str, list[dict[str, str]]] = defaultdict(list)
+        for block in draft_blocks:
+            match = self._direct_match(block, entry_by_id, by_signature, unused)
+            if match is None:
+                match = self._fuzzy_match(block, source_entries, unused)
+            if match is None:
+                if block["section_key"] == "skills":
+                    novel_by_section["skills"].append(
+                        {
+                            "heading": block["heading"],
+                            "text": block["text"],
+                        }
+                    )
+                    continue
+                return None
+            unused.remove(match["id"])
+            selected_order.append(match["id"])
+            selected[match["id"]] = {
+                "section_key": block["section_key"],
+                "heading": block["heading"],
+                "meta": block["meta"],
+                "text": block["text"],
+            }
+
+        locator = self._summary_locator(
+            chosen["id"],
+            compatible_ids,
+            summary_source,
+            summary_rows,
+        )
+        summary = None
+        if summary_section is not None:
+            if locator is None:
+                return None
+            summary = {
+                "source": locator,
+                "text": "\n".join(
+                    paragraph.text
+                    for block in summary_section.blocks
                     for paragraph in block.paragraphs
-                    for source_id in paragraph.source_entry_ids
-                ]
-                if len(set(source_ids)) != 1:
-                    return None
-                entry_id = source_ids[0]
-                if entry_id not in entries:
-                    return None
-                block_by_entry[entry_id] = {
-                    "section_key": section.section_key,
-                    "text": "\n".join(paragraph.text for paragraph in block.paragraphs).strip(),
-                }
+                ).strip(),
+            }
+        elif locator is not None:
+            legacy_summary = document.personal_info.headline.strip()
+            summary = {"source": locator, "text": legacy_summary or None}
+
         return {
-            "path": matches[0],
-            "source_document_id": source_document_id,
-            "selected_order": unique_ids,
-            "selected": block_by_entry,
+            "path": chosen["path"],
+            "source_document_id": chosen["id"],
+            "selected_order": selected_order,
+            "selected": selected,
             "source_entries": source_entries,
+            "novel_by_section": dict(novel_by_section),
+            "summary": summary,
         }
 
     def write(self, resolved: dict[str, Any], target: Path) -> None:
@@ -139,10 +189,20 @@ class SourceWordExport:
             if not elements:
                 continue
             editable = self._editable_elements(content["section_key"], elements)
-            if editable:
-                self._replace_element_text(editable[0], content["text"])
-                for extra in editable[1:]:
-                    self._replace_element_text(extra, "")
+            self._replace_group_text(editable, content["text"])
+
+        summary = resolved.get("summary")
+        if summary:
+            source = summary["source"]
+            block_ids = source.get("block_ids") or [source.get("block_id")]
+            elements = [element_by_block[value] for value in block_ids if value in element_by_block]
+            if not elements:
+                raise ValueError("无法在原 Word 中定位自我介绍")
+            if summary["text"] is None:
+                for element in elements:
+                    body.remove(element)
+            else:
+                self._replace_group_text(elements, summary["text"])
 
         by_section = defaultdict(list)
         for entry in resolved["source_entries"]:
@@ -155,15 +215,221 @@ class SourceWordExport:
                 if entry_id in groups
                 and selected.get(entry_id, {}).get("section_key") == section_key
             ]
+            novel = resolved.get("novel_by_section", {}).get(section_key, [])
+            if not selected_ids and not novel:
+                continue
             all_elements = [element for entry_id in source_ids for element in groups[entry_id]]
             anchor = min(body.index(element) for element in all_elements)
             for element in all_elements:
                 body.remove(element)
             insertion = anchor
+            if novel:
+                template_id = next(
+                    (entry_id for entry_id in selected_ids if entry_id in groups),
+                    source_ids[0],
+                )
+                for item in novel:
+                    cloned = [deepcopy(element) for element in groups[template_id]]
+                    editable = self._editable_elements(section_key, cloned)
+                    self._replace_group_text(
+                        editable,
+                        f"{item['heading']}：{item['text']}".strip("："),
+                    )
+                    for element in cloned:
+                        body.insert(insertion, element)
+                        insertion += 1
             for entry_id in selected_ids:
                 for element in groups[entry_id]:
                     body.insert(insertion, element)
                     insertion += 1
+
+    def _source_documents(self, rows) -> list[dict[str, Any]]:
+        documents = []
+        for row in rows:
+            if not str(row[2]).lower().endswith(".docx"):
+                continue
+            matches = list(self.paths.imports.glob(f"{row[1]}.docx"))
+            if len(matches) != 1:
+                continue
+            documents.append(
+                {
+                    "id": str(row[0]),
+                    "path": matches[0],
+                    "created_at": str(row[3]),
+                    "sha256": self._sha256(matches[0]),
+                }
+            )
+        return documents
+
+    @staticmethod
+    def _choose_document(
+        documents: list[dict[str, Any]],
+        entries: list[dict[str, Any]],
+        linked_document_ids: set[str],
+    ) -> tuple[dict[str, Any], set[str]]:
+        by_id = {document["id"]: document for document in documents}
+        linked_hashes = Counter(
+            by_id[document_id]["sha256"]
+            for document_id in linked_document_ids
+            if document_id in by_id
+        )
+        if linked_hashes:
+            chosen_hash = max(
+                linked_hashes,
+                key=lambda value: (
+                    linked_hashes[value],
+                    max(
+                        document["created_at"]
+                        for document in documents
+                        if document["sha256"] == value
+                    ),
+                ),
+            )
+        else:
+            chosen_hash = max(documents, key=lambda item: item["created_at"])["sha256"]
+        compatible = [item for item in documents if item["sha256"] == chosen_hash]
+        entry_counts = Counter(
+            entry["source"].get("document_id")
+            for entry in entries
+            if entry["source"].get("document_id")
+        )
+        chosen = max(
+            compatible,
+            key=lambda item: (entry_counts[item["id"]], item["created_at"]),
+        )
+        return chosen, {item["id"] for item in compatible}
+
+    @staticmethod
+    def _draft_blocks(document: ResumeDocument) -> list[dict[str, Any]]:
+        return [
+            {
+                "section_key": section.section_key,
+                "heading": block.heading.strip(),
+                "meta": block.meta.strip(),
+                "text": "\n".join(paragraph.text for paragraph in block.paragraphs).strip(),
+                "source_ids": [
+                    str(source_id)
+                    for paragraph in block.paragraphs
+                    for source_id in paragraph.source_entry_ids
+                ],
+            }
+            for section in document.sections
+            if section.section_key != "summary"
+            for block in section.blocks
+        ]
+
+    @classmethod
+    def _direct_match(cls, block, entry_by_id, by_signature, unused):
+        for source_id in block["source_ids"]:
+            entry = entry_by_id.get(source_id)
+            if entry is None:
+                continue
+            signature = cls._source_signature(entry)
+            match = by_signature.get(signature)
+            if match and match["id"] in unused and match["section_key"] == block["section_key"]:
+                return match
+        return None
+
+    @classmethod
+    def _fuzzy_match(cls, block, source_entries, unused):
+        candidates = [
+            entry
+            for entry in source_entries
+            if entry["id"] in unused and entry["section_key"] == block["section_key"]
+        ]
+        if not candidates:
+            return None
+        ranked = sorted(
+            ((cls._match_score(block, entry), entry) for entry in candidates),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        return ranked[0][1] if ranked[0][0] >= 0.42 else None
+
+    @classmethod
+    def _match_score(cls, block, entry) -> float:
+        heading = cls._normalize(block["heading"])
+        title = cls._normalize(entry["title"])
+        text = cls._normalize(block["text"])
+        source_text = cls._normalize(entry["content"])
+        title_score = SequenceMatcher(None, heading, title).ratio() if heading and title else 0
+        if heading and title and (heading in title or title in heading):
+            title_score = max(title_score, 0.9)
+        content_score = (
+            SequenceMatcher(None, text[:500], source_text[:500]).ratio()
+            if text and source_text
+            else 0
+        )
+        return title_score * 0.75 + content_score * 0.25
+
+    @staticmethod
+    def _normalize(value: str) -> str:
+        return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", value.lower())
+
+    @staticmethod
+    def _summary_locator(chosen_id, compatible_ids, profile_source, summary_rows):
+        if (
+            profile_source
+            and profile_source.get("document_id") in compatible_ids
+            and profile_source.get("block_ids")
+        ):
+            return profile_source
+        locators = []
+        for document_id, payload in summary_rows:
+            if str(document_id) not in compatible_ids:
+                continue
+            locator = json.loads(payload)
+            locators.append((str(document_id), locator))
+        direct = next(
+            (locator for document_id, locator in locators if document_id == chosen_id), None
+        )
+        return direct or (locators[-1][1] if locators else None)
+
+    @classmethod
+    def _deduplicate_source_entries(cls, entries, chosen_id):
+        preferred = sorted(
+            entries,
+            key=lambda entry: (
+                entry["source"].get("document_id") != chosen_id,
+                entry["created_at"],
+                entry["id"],
+            ),
+        )
+        result = []
+        seen = set()
+        for entry in preferred:
+            signature = cls._source_signature(entry)
+            if signature is not None and signature in seen:
+                continue
+            if signature is not None:
+                seen.add(signature)
+            result.append(entry)
+        return result
+
+    @staticmethod
+    def _source_signature(entry) -> tuple[str, tuple[str, ...]] | None:
+        source = entry["source"]
+        block_ids = source.get("block_ids") or [source.get("block_id")]
+        normalized = tuple(str(value) for value in block_ids if value)
+        return (entry["section_key"], normalized) if normalized else None
+
+    @staticmethod
+    def _looks_like_personal_info(entry) -> bool:
+        source = entry["source"]
+        block_ids = source.get("block_ids") or [source.get("block_id")]
+        if entry["section_key"] != "other" or not any(
+            str(value).startswith("table-") for value in block_ids if value
+        ):
+            return False
+        return bool(re.search(r"姓名|性别|电话|手机|邮箱|@|1[3-9]\d{9}", entry["content"]))
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     @staticmethod
     def _body_block_map(body) -> dict[str, Any]:
@@ -187,6 +453,20 @@ class SourceWordExport:
             return elements[1:]
         return elements
 
+    @classmethod
+    def _replace_group_text(cls, elements: list[Any], text: str) -> None:
+        if not elements:
+            return
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            lines = [""]
+        for index, element in enumerate(elements):
+            if index < len(elements) - 1:
+                value = lines[index] if index < len(lines) else ""
+            else:
+                value = "；".join(lines[index:]) if index < len(lines) else ""
+            cls._replace_element_text(element, value)
+
     @staticmethod
     def _replace_element_text(element, text: str) -> None:
         text_nodes = element.xpath(".//w:t", namespaces=NS)
@@ -200,6 +480,13 @@ class SourceWordExport:
 
     @staticmethod
     def _entry(row) -> dict[str, Any]:
-        payload = json.loads(row[2])
+        payload = json.loads(row[3])
         source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
-        return {"id": row[0], "section_key": row[1], "source": source}
+        return {
+            "id": str(row[0]),
+            "section_key": str(row[1]),
+            "title": str(row[2] or payload.get("title") or ""),
+            "content": str(payload.get("content") or ""),
+            "source": source,
+            "created_at": str(row[4]),
+        }

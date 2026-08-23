@@ -162,3 +162,5 @@ def test_docx_headings_control_grouping_and_summary_destination(
             "善于从数据中发现规律，也有实习和社团经历。\n"
             "愿意持续学习并快速补齐岗位所需技能。"
         )
+        assert profile["personal_info"]["_summary_source"]["document_id"] == result["id"]
+        assert profile["personal_info"]["_summary_source"]["block_ids"]

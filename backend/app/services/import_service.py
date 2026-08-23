@@ -138,6 +138,7 @@ class ImportService:
                 payload["source"] = candidate["source_locator"]
                 if section_key == "summary":
                     profile = self.profiles.get_profile()["personal_info"]
+                    profile["_summary_source"] = candidate["source_locator"]
                     profile["summary"] = str(payload.get("content") or "").strip()
                     self.profiles.save_profile(profile)
                 else:
