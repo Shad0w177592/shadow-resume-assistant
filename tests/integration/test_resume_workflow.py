@@ -175,7 +175,8 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
             "paragraphs": [
                 {
                     "paragraph_id": item["paragraph_id"],
-                    "text": item["current_text"].replace("做了", "完成"),
+                    "text": item["current_text"].replace("做了", "完成")
+                    + "，负责2个模块并交付3个项目",
                     "reason": "使用专业行动表达",
                 }
                 for item in request["payload"]["paragraphs"]
@@ -207,10 +208,25 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
         )
         generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
         assert generated.status_code == 200, generated.text
-        text = generated.json()["document"]["sections"][0]["blocks"][0]["paragraphs"][
-            0
-        ]["text"]
+        body = generated.json()
+        paragraph = body["document"]["sections"][0]["blocks"][0]["paragraphs"][0]
+        text = paragraph["text"]
         assert "完成工作流" in text
+        assert "负责2个模块并交付3个项目" in text
+        assert "数字“2”" in body["fact_warnings"][0]
+        assert "数字“3”" in body["fact_warnings"][0]
+        assert paragraph["risk_flags"] == [
+            "unsupported_number:2",
+            "unsupported_number:3",
+        ]
+        saved = client.get(f"/api/jobs/{job['id']}/draft", headers=HEADERS)
+        assert saved.status_code == 200
+        assert (
+            "负责2个模块并交付3个项目"
+            in saved.json()["document"]["sections"][0]["blocks"][0]["paragraphs"][0][
+                "text"
+            ]
+        )
     assert calls == ["job_parse", "resume_rewrite"]
 
 

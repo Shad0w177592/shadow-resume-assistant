@@ -27,7 +27,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     if (path.endsWith("/draft") && method === "GET") throw new Error("no draft");
     if (path.endsWith("/versions") && method === "GET") return [];
     if (path.endsWith("/resume-config") && method === "PUT") return body;
-    if (path.endsWith("/generate")) return draft;
+    if (path.endsWith("/generate")) return { ...draft, fact_warnings: ["生成内容中的数字“2”没有出现在用户资料或当前原文中"] };
     if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
@@ -57,6 +57,10 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   fireEvent.dragStart(skillsCard!); fireEvent.dragOver(projectCard!); fireEvent.drop(projectCard!);
   await user.click(screen.getByRole("button", { name: "生成简历" }));
   expect(await screen.findByDisplayValue("完成工作流")).toBeInTheDocument();
+  expect(await screen.findByText("简历已生成，请核实 AI 补充内容")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "取消提醒并保留简历" }));
+  expect(screen.queryByText("简历已生成，请核实 AI 补充内容")).not.toBeInTheDocument();
+  expect(screen.getByDisplayValue("完成工作流")).toBeInTheDocument();
   const putConfig = request.mock.calls.find((call) => call[0].endsWith("/resume-config") && call[1] === "PUT");
   expect((putConfig?.[2] as { config: typeof config }).config.template).toBe("technical_double_column");
   expect((putConfig?.[2] as { config: typeof config }).config.page_target).toBe(2);

@@ -90,6 +90,7 @@ class ResumeWorkflowService:
             steps["DETERMINISTIC_FACT_CHECK"] = "running"
             entry_by_id = {entry["id"]: entry for entry in selected}
             violations = []
+            fact_warnings: list[str] = []
             for section in document.sections:
                 for block in section.blocks:
                     for paragraph in block.paragraphs:
@@ -104,10 +105,15 @@ class ResumeWorkflowService:
                             for source_id in paragraph.source_entry_ids
                         ]
                         result = check_hard_facts(source_texts, paragraph.text)
+                        paragraph.risk_flags.extend(
+                            violation
+                            for violation in result.violations
+                            if violation not in paragraph.risk_flags
+                        )
                         violations.extend(result.violations)
             if violations:
                 detail = explain_violations(violations)
-                raise ValueError(f"事实检查未通过：{detail}。请检查生成内容或补充真实资料")
+                fact_warnings.append(f"{detail}。这些内容已保留在草稿中，请在使用前核实")
             steps["DETERMINISTIC_FACT_CHECK"] = "completed"
 
             # V1 mock provider performs no semantic rewrite;
@@ -135,7 +141,13 @@ class ResumeWorkflowService:
                 warnings=warnings,
                 redacted_summary=redacted_summary,
             )
-            return {**draft, "workflow_task_id": task_id, "layout": layout, "warnings": warnings}
+            return {
+                **draft,
+                "workflow_task_id": task_id,
+                "layout": layout,
+                "warnings": warnings,
+                "fact_warnings": fact_warnings,
+            }
         except Exception as error:
             self._save_task(task_id, job_id, "failed", 100, steps, error=str(error))
             raise
