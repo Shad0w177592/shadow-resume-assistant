@@ -9,6 +9,7 @@ from uuid import uuid4
 from app.domain.documents import ParsedDocument, ParseStatus
 from app.persistence.database import Database, utc_now
 from app.services.document_parser import DocumentParser
+from app.services.entry_titles import concrete_entry_title
 from app.services.file_storage import FileStorage
 from app.services.profile_service import ProfileService
 
@@ -35,11 +36,7 @@ SECTION_HEADINGS = {
     "other": ("其他经历", "其他成果"),
 }
 
-SECTION_TITLES = {
-    "summary": "自我介绍",
-    "skills": "专业技能",
-    "awards": "证书与奖项",
-}
+SECTION_TITLES = {"summary": "自我介绍"}
 
 EXPERIENCE_SECTIONS = {"education", "work", "internship", "project", "campus", "awards", "other"}
 DATE_RANGE = re.compile(
@@ -200,9 +197,7 @@ class ImportService:
                 else:
                     section, confidence = self._category(block.text)
                     candidates.append(
-                        self._candidate(
-                            parsed, page.page_number, section, [block], confidence
-                        )
+                        self._candidate(parsed, page.page_number, section, [block], confidence)
                     )
             self._append_section_candidates(
                 candidates,
@@ -213,24 +208,23 @@ class ImportService:
             )
         return candidates
 
-    def _append_section_candidates(
-        self, candidates, parsed, page_number, section, blocks
-    ) -> None:
+    def _append_section_candidates(self, candidates, parsed, page_number, section, blocks) -> None:
         if not section or not blocks:
             return
         for group in self._segment_section(section, blocks):
-            candidates.append(
-                self._candidate(parsed, page_number, section, group, "clear")
-            )
+            candidates.append(self._candidate(parsed, page_number, section, group, "clear"))
 
     def _candidate(self, parsed, page_number, section, blocks, confidence):
         content = "\n".join(block.text.strip() for block in blocks if block.text.strip())
         first = blocks[0]
+        payload = {"content": content}
         return {
             "id": str(uuid4()),
             "section_key": section,
-            "title": SECTION_TITLES.get(section, self._title(first.text)),
-            "payload": {"content": content},
+            "title": SECTION_TITLES.get(
+                section, concrete_entry_title(section, first.text, payload)
+            ),
+            "payload": payload,
             "source_locator": {
                 "document_id": str(parsed.document_id),
                 "page": page_number,
@@ -250,9 +244,7 @@ class ImportService:
         if section not in EXPERIENCE_SECTIONS:
             return [[block] for block in blocks]
         starts = [
-            index
-            for index, block in enumerate(blocks)
-            if DATE_RANGE.search(block.text.strip())
+            index for index, block in enumerate(blocks) if DATE_RANGE.search(block.text.strip())
         ]
         if not starts:
             return [[block] for block in blocks]

@@ -5,6 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.persistence.database import Database, utc_now
+from app.services.entry_titles import concrete_entry_title
 
 PROFILE_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -149,11 +150,12 @@ class ProfileService:
 
     @staticmethod
     def _row_to_entry(row) -> dict[str, Any]:
+        payload = json.loads(row[3])
         return {
             "id": row[0],
             "section_key": row[1],
-            "title": row[2],
-            "payload": json.loads(row[3]),
+            "title": concrete_entry_title(row[1], row[2], payload),
+            "payload": payload,
             "importance": row[4],
             "created_at": row[5],
             "updated_at": row[6],

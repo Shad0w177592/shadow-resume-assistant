@@ -33,7 +33,7 @@ def test_import_candidates_require_confirmation_and_keep_source_locator(
         assert before["entries"] == []
         first, second = payload["candidates"]
         assert first["section_key"] == "project"
-        assert first["title"] == "影子简历助手：完成本地简历生成流程"
+        assert first["title"] == "影子简历助手"
         confirmed = client.post(
             f"/api/imports/{payload['id']}/confirm",
             headers=HEADERS,
@@ -126,6 +126,12 @@ def test_docx_headings_control_grouping_and_summary_destination(
             "work",
             "internship",
             "summary",
+        ]
+        assert [item["title"] for item in candidates[:4]] == [
+            "再读轩书友会",
+            "经济学院辩论队",
+            "示例科技有限公司",
+            "示例文化公司",
         ]
         assert "再读轩书友会" in candidates[0]["payload"]["content"]
         assert "新媒体部长" in candidates[0]["payload"]["content"]
