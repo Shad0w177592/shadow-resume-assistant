@@ -486,7 +486,7 @@ class ResumeWorkflowService:
                                 ResumeParagraph(
                                     paragraph_id=str(uuid4()),
                                     text=summary_text,
-                                    source_entry_ids=[],
+                                    source_entry_ids=[entry["id"] for entry in entries],
                                 )
                             ],
                         )

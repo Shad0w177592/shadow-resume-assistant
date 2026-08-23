@@ -424,6 +424,16 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
             block["paragraphs"][0]["text"] for block in sections["work"]["blocks"]
         ] == ["保持原文一", "保持原文二"]
         assert sections["skills"]["blocks"][0]["heading"] == "AI Agent 项目交付"
+        added_skill = sections["skills"]["blocks"][0]["paragraphs"][0]
+        assert added_skill["source_entry_ids"] == []
+        assert "ai_added_skill" in added_skill["risk_flags"]
+        assert all(
+            flag == "ai_added_skill" or flag.startswith("unsupported_number:")
+            for flag in added_skill["risk_flags"]
+        )
+        assert set(
+            sections["summary"]["blocks"][0]["paragraphs"][0]["source_entry_ids"]
+        ) == {first_work["id"], second_work["id"], skill["id"]}
         original_skill = next(
             block
             for block in sections["skills"]["blocks"]

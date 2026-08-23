@@ -100,14 +100,27 @@ def test_job_crud_draft_evidence_and_job_isolation(monkeypatch, tmp_path: Path) 
         assert generated_report["requirements"]
         assert first_draft["id"] != second_draft["id"]
         paragraphs = [
-            paragraph
+            (section["section_key"], paragraph)
             for section in first_draft["document"]["sections"]
             for block in section["blocks"]
             for paragraph in block["paragraphs"]
         ]
         assert paragraphs
+        sourced = [
+            paragraph for _, paragraph in paragraphs if paragraph["source_entry_ids"]
+        ]
+        assert sourced
         assert all(
-            paragraph["source_entry_ids"] == [entry["id"]] for paragraph in paragraphs
+            paragraph["source_entry_ids"] == [entry["id"]] for paragraph in sourced
+        )
+        unsourced = [
+            (section_key, paragraph)
+            for section_key, paragraph in paragraphs
+            if not paragraph["source_entry_ids"]
+        ]
+        assert all(
+            section_key == "skills" and paragraph["risk_flags"] == ["ai_added_skill"]
+            for section_key, paragraph in unsourced
         )
         assert (
             client.delete(
