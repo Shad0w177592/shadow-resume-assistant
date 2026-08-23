@@ -2,6 +2,7 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { createSidecarSupervisor, waitForUrl } = require("./sidecar.cjs");
 const { validateWebBundle } = require("./web-bundle.cjs");
+const { transcribeWindowsChinese } = require("./windows-speech.cjs");
 const {
   copyManagedData,
   readConfiguredDataDirectory,
@@ -129,20 +130,11 @@ async function createWindow() {
   });
   ipcMain.handle("audio:transcribe", async (_event, request) => {
     const bytes = request?.bytes;
-    if (!bytes || bytes.byteLength === 0 || bytes.byteLength > 15 * 1024 * 1024) {
-      throw new Error("录音为空或超过 15MB");
+    const mediaType = String(request?.mediaType || "audio/wav");
+    if (mediaType !== "audio/wav" && mediaType !== "audio/wave") {
+      throw new Error("录音格式转换失败，请重新录音");
     }
-    const mediaType = String(request?.mediaType || "audio/webm");
-    const form = new FormData();
-    form.append("audio", new Blob([bytes], { type: mediaType }), "voice.webm");
-    const response = await fetch(`${sidecarSupervisor.current.baseUrl}/api/transcriptions`, {
-      method: "POST",
-      headers: { "x-shadow-session": sidecarSupervisor.current.token },
-      body: form,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(payload?.detail || "语音转写失败");
-    return payload;
+    return { text: await transcribeWindowsChinese(bytes) };
   });
   const window = new BrowserWindow({
     width: 1280,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiRequest } from "../api";
+import { convertRecordedAudioToWav } from "../audio";
 import { Button, Card, Dialog, EmptyState } from "../components/ui";
 import { useNotifications } from "../components/Notifications";
 import type { Profile, ResumeDraft } from "../types";
@@ -192,8 +193,9 @@ export function WorkbenchPage() {
       recorder.addEventListener("stop", async () => {
         setRecording(false);
         try {
-          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-          const result = await window.shadowDesktop?.transcribeAudio(await blob.arrayBuffer(), blob.type);
+          const recorded = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          const wav = await convertRecordedAudioToWav(recorded);
+          const result = await window.shadowDesktop?.transcribeAudio(await wav.arrayBuffer(), "audio/wav");
           if (result) setInstruction(result.text);
         } catch (error) { notify(error instanceof Error ? error.message : "转写失败，可继续使用文字输入", "error"); }
         finally { stream.getTracks().forEach((track) => track.stop()); streamRef.current = null; recorderRef.current = null; chunksRef.current = []; }

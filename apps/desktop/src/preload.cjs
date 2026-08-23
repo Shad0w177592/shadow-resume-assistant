@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld("shadowDesktop", {
   pickPhoto: () => ipcRenderer.invoke("file:pick-photo"),
   pickBackup: () => ipcRenderer.invoke("file:pick-backup"),
   changeDataDirectory: () => ipcRenderer.invoke("data:change-directory"),
-  transcribeAudio: (bytes, mediaType = "audio/webm") =>
+  transcribeAudio: (bytes, mediaType = "audio/wav") =>
     ipcRenderer.invoke("audio:transcribe", { bytes, mediaType }),
   platform: process.platform,
 });

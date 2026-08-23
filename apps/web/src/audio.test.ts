@@ -1,4 +1,4 @@
-import { recordAndTranscribe } from "./audio";
+import { downmixAndResample, encodePcm16Wav, recordAndTranscribe } from "./audio";
 
 class FakeRecorder extends EventTarget {
   mimeType = "audio/webm";
@@ -32,3 +32,28 @@ test("stops tracks when transcription fails", async () => {
   expect(stop).toHaveBeenCalledOnce();
 });
 
+
+test("encodes browser audio as PCM WAV for Windows recognition", () => {
+  const wav = encodePcm16Wav(
+    [new Float32Array([-1, -0.5, 0, 0.5, 1])],
+    16000,
+  );
+  const bytes = new Uint8Array(wav);
+  const view = new DataView(wav);
+  expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF");
+  expect(new TextDecoder().decode(bytes.slice(8, 12))).toBe("WAVE");
+  expect(view.getUint16(20, true)).toBe(1);
+  expect(view.getUint16(22, true)).toBe(1);
+  expect(view.getUint32(24, true)).toBe(16000);
+  expect(view.getUint16(34, true)).toBe(16);
+  expect(view.getInt16(44, true)).toBe(-32768);
+  expect(view.getInt16(52, true)).toBe(32767);
+});
+test("downmixes 48kHz browser audio to Windows recognizer compatible 16kHz mono", () => {
+  const left = new Float32Array(48000).fill(0.75);
+  const right = new Float32Array(48000).fill(0.25);
+  const mono = downmixAndResample([left, right], 48000);
+  expect(mono).toHaveLength(16000);
+  expect(mono[0]).toBeCloseTo(0.5);
+  expect(mono[15999]).toBeCloseTo(0.5);
+});
