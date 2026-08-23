@@ -77,6 +77,7 @@ class ResumeWorkflowService:
             selected, warnings = self._select_entries(job_id, config, entries)
             if not selected:
                 raise ValueError("当前栏目与经历取舍后没有可生成内容")
+            selected = self._apply_section_limits(config, selected, warnings)
             selected = self._fit_budget(config, selected, warnings)
             steps["SELECT_EVIDENCE"] = "completed"
 
@@ -233,11 +234,32 @@ class ResumeWorkflowService:
         selected.sort(
             key=lambda item: (
                 item["selection_mode"] != "must_include",
+                -item.get("importance", 3),
                 -item["relevance_score"],
                 item["created_at"],
             )
         )
         return selected, warnings
+
+    @staticmethod
+    def _apply_section_limits(
+        config: dict[str, Any], entries: list[dict[str, Any]], warnings: list[str]
+    ) -> list[dict[str, Any]]:
+        limits = {
+            section["section_key"]: section.get("max_entries") for section in config["sections"]
+        }
+        counts: defaultdict[str, int] = defaultdict(int)
+        selected = []
+        for entry in entries:
+            section_key = entry["section_key"]
+            limit = limits.get(section_key)
+            must_include = entry["selection_mode"] == "must_include"
+            if limit is None or counts[section_key] < limit or must_include:
+                selected.append(entry)
+                counts[section_key] += 1
+                continue
+            warnings.append(f"因“{section_key}”栏目条数设置省略：{entry['title'] or '未命名记录'}")
+        return selected
 
     @staticmethod
     def _fit_budget(

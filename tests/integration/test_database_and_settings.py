@@ -27,7 +27,9 @@ EXPECTED_TABLES = {
 }
 
 
-def test_initial_migration_creates_required_tables_and_settings_survive_restart(tmp_path: Path) -> None:
+def test_initial_migration_creates_required_tables_and_settings_survive_restart(
+    tmp_path: Path,
+) -> None:
     paths = DataPaths.create(tmp_path / "app-data")
     migrations = Path(__file__).resolve().parents[2] / "backend" / "migrations"
     database = Database(paths.database, migrations)
@@ -36,15 +38,24 @@ def test_initial_migration_creates_required_tables_and_settings_survive_restart(
     with database.connect() as connection:
         tables = {
             row[0]
-            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        profile_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(profile_section_entry)")
         }
     assert EXPECTED_TABLES <= tables
+    assert "importance" in profile_columns
     restarted = Database(paths.database, migrations)
     restarted.migrate()
     assert restarted.get_setting("initialized") is True
 
 
-def test_onboarding_and_api_key_are_separated_from_sqlite(monkeypatch, tmp_path: Path) -> None:
+def test_onboarding_and_api_key_are_separated_from_sqlite(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "session")
     credentials = InMemoryCredentialStore()
     app = create_app(tmp_path / "app-data", credentials)
@@ -68,7 +79,9 @@ def test_onboarding_and_api_key_are_separated_from_sqlite(monkeypatch, tmp_path:
     assert secret.encode() not in database_bytes
 
 
-def test_invalid_api_key_does_not_replace_existing_key(monkeypatch, tmp_path: Path) -> None:
+def test_invalid_api_key_does_not_replace_existing_key(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "session")
     credentials = InMemoryCredentialStore()
     credentials.set("sk-existing-secret")

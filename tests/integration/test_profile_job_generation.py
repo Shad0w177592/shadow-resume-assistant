@@ -22,6 +22,7 @@ def add_entry(client: TestClient, title: str = "校园项目") -> dict:
             "section_key": "project",
             "title": title,
             "payload": {"content": "负责需求梳理并完成原型", "skills": "Figma"},
+            "importance": 5,
         },
     )
     assert response.status_code == 201
@@ -49,11 +50,13 @@ def test_all_profile_fields_are_optional_and_entry_crud_works(
         saved = client.put("/api/profile", headers=HEADERS, json={"personal_info": {}})
         assert saved.status_code == 200
         entry = add_entry(client)
+        assert entry["importance"] == 5
         duplicate = client.post(
             f"/api/profile/entries/{entry['id']}/duplicate", headers=HEADERS
         )
         assert duplicate.status_code == 201
         assert duplicate.json()["title"].endswith("（副本）")
+        assert duplicate.json()["importance"] == 5
         updated = client.put(
             f"/api/profile/entries/{entry['id']}",
             headers=HEADERS,
@@ -61,9 +64,11 @@ def test_all_profile_fields_are_optional_and_entry_crud_works(
                 "section_key": "other",
                 "title": None,
                 "payload": {"note": "自由内容"},
+                "importance": 4,
             },
         )
         assert updated.json()["payload"] == {"note": "自由内容"}
+        assert updated.json()["importance"] == 4
         deleted = client.delete(f"/api/profile/entries/{entry['id']}", headers=HEADERS)
         assert deleted.status_code == 204
         profile = client.get("/api/profile", headers=HEADERS).json()

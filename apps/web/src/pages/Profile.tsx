@@ -20,6 +20,7 @@ export function ProfilePage() {
   const [sectionKey, setSectionKey] = useState("project");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [importance, setImportance] = useState(3);
   const [photoData, setPhotoData] = useState("");
 
   useEffect(() => {
@@ -53,11 +54,11 @@ export function ProfilePage() {
   async function submitEntry(event: FormEvent) {
     event.preventDefault();
     if (!content.trim() && !title.trim()) { notify("请至少填写标题或内容", "error"); return; }
-    const body = { section_key: sectionKey, title: title || null, payload: { content } };
+    const body = { section_key: sectionKey, title: title || null, payload: { content }, importance };
     try {
       const saved = await apiRequest<ProfileEntry>(`/api/profile/entries${editingId ? `/${editingId}` : ""}`, editingId ? "PUT" : "POST", body);
       setProfile((current) => ({ ...current, entries: editingId ? current.entries.map((item) => item.id === saved.id ? saved : item) : [...current.entries, saved] }));
-      setEditingId(null); setTitle(""); setContent("");
+      setEditingId(null); setTitle(""); setContent(""); setImportance(3);
       notify("经历已保存", "success");
     } catch (error) { notify(error instanceof Error ? error.message : "保存失败", "error"); }
   }
@@ -65,6 +66,7 @@ export function ProfilePage() {
   function edit(entry: ProfileEntry) {
     setEditingId(entry.id); setSectionKey(entry.section_key); setTitle(entry.title || "");
     setContent(String(entry.payload.content || ""));
+    setImportance(entry.importance || 3);
   }
 
   async function duplicate(entry: ProfileEntry) {
@@ -109,12 +111,13 @@ export function ProfilePage() {
         <form onSubmit={submitEntry} className="entry-form">
           <label className="field"><span>栏目</span><select value={sectionKey} onChange={(event) => setSectionKey(event.target.value)}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <TextInput label="标题（选填）" value={title} onChange={(event) => setTitle(event.target.value)} />
+          <label className="field"><span>重要程度</span><select value={importance} onChange={(event) => setImportance(Number(event.target.value))}><option value={5}>5 - 最高</option><option value={4}>4 - 很重要</option><option value={3}>3 - 一般</option><option value={2}>2 - 较低</option><option value={1}>1 - 最低</option></select></label>
           <label className="field"><span>经历内容（选填，写你实际拥有的内容即可）</span><textarea value={content} onChange={(event) => setContent(event.target.value)} /></label>
           <div className="actions"><Button type="submit">{editingId ? "保存修改" : "新增经历"}</Button>{editingId && <Button type="button" className="secondary" onClick={() => setEditingId(null)}>取消</Button>}</div>
         </form>
       </Card>
       <Card title="资料条目">
-        {profile.entries.length === 0 ? <EmptyState title="还没有经历" description="只填写你实际拥有的内容；缺少成果、技能或时间都可以留空。" /> : <ul className="record-list">{profile.entries.map((entry) => <li key={entry.id}><div><strong>{entry.title || "未命名经历"}</strong><span>{categories.find(([key]) => key === entry.section_key)?.[1] || entry.section_key}</span></div><div className="inline-actions"><Button className="ghost" onClick={() => edit(entry)}>编辑</Button><Button className="ghost" onClick={() => duplicate(entry)}>复制</Button><Button className="danger" onClick={() => remove(entry)}>删除</Button></div></li>)}</ul>}
+        {profile.entries.length === 0 ? <EmptyState title="还没有经历" description="只填写你实际拥有的内容；缺少成果、技能或时间都可以留空。" /> : <ul className="record-list">{profile.entries.map((entry) => <li key={entry.id}><div><strong>{entry.title || "未命名经历"}</strong><span>{categories.find(([key]) => key === entry.section_key)?.[1] || entry.section_key} · 重要程度：{entry.importance || 3}/5</span></div><div className="inline-actions"><Button className="ghost" onClick={() => edit(entry)}>编辑</Button><Button className="ghost" onClick={() => duplicate(entry)}>复制</Button><Button className="danger" onClick={() => remove(entry)}>删除</Button></div></li>)}</ul>}
       </Card>
     </main>
   );

@@ -19,7 +19,7 @@ test("profile fields are optional and a free-form entry can be added", async () 
   const request = vi.fn(async (path: string, method = "GET") => {
     if (path === "/api/profile" && method === "GET") return { id: "profile", display_name: "", personal_info: {}, entries: [] };
     if (path === "/api/profile" && method === "PUT") return { id: "profile", display_name: "", personal_info: {} };
-    if (path === "/api/profile/entries") return { id: "entry-1", section_key: "other", title: "开源社区", payload: { content: "维护中文文档" }, created_at: "", updated_at: "" };
+    if (path === "/api/profile/entries") return { id: "entry-1", section_key: "other", title: "开源社区", payload: { content: "维护中文文档" }, importance: 5, created_at: "", updated_at: "" };
     if (path === "/api/profile/photo/from-path") return { file_id: "photo-1", data_url: "data:image/png;base64,AA==" };
     if (path === "/api/profile/photo/photo-1") return { file_id: "photo-1", data_url: "data:image/png;base64,AA==" };
     throw new Error(`unexpected ${method} ${path}`);
@@ -41,9 +41,13 @@ test("profile fields are optional and a free-form entry can be added", async () 
   await user.selectOptions(screen.getByLabelText("栏目"), "other");
   await user.type(screen.getByLabelText("标题（选填）"), "开源社区");
   await user.type(screen.getByLabelText(/经历内容/), "维护中文文档");
+  await user.selectOptions(screen.getByLabelText("重要程度"), "5");
   await user.click(screen.getByRole("button", { name: "新增经历" }));
   expect(await screen.findByText("开源社区")).toBeInTheDocument();
-  expect(screen.getAllByText("其他自定义经历或成果")).toHaveLength(2);
+  expect(screen.getByText(/重要程度：5\/5/)).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "其他自定义经历或成果" })).toBeInTheDocument();
+  expect(screen.getByText(/其他自定义经历或成果 · 重要程度/)).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith("/api/profile/entries", "POST", expect.objectContaining({ importance: 5 }));
 });
 
 test("a job can generate a read-only evidence-backed draft preview", async () => {

@@ -14,11 +14,11 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const config = {
     template: "single_column", page_target: 1, strategies: ["concise"], entry_modes: {},
     sections: [
-      { section_key: "project", title: "项目经历", enabled: true, order: 0, column: "right" },
-      { section_key: "skills", title: "专业技能", enabled: true, order: 1, column: "left" },
+      { section_key: "project", title: "项目经历", enabled: true, order: 0, column: "right", max_entries: null },
+      { section_key: "skills", title: "专业技能", enabled: true, order: 1, column: "left", max_entries: null },
     ],
   };
-  const profile = { id: "profile", display_name: "", personal_info: {}, entries: [{ id: "entry-1", section_key: "project", title: "影子项目", payload: { content: "完成工作流" }, created_at: "", updated_at: "" }] };
+  const profile = { id: "profile", display_name: "", personal_info: {}, entries: [{ id: "entry-1", section_key: "project", title: "影子项目", payload: { content: "完成工作流" }, importance: 5, created_at: "", updated_at: "" }] };
   const draft = { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", section_key: "project", title: "项目经历", order: 0, column: "right", blocks: [{ block_id: "block-1", heading: "影子项目", meta: "", paragraphs: [{ paragraph_id: "p-1", text: "完成工作流", source_entry_ids: ["entry-1"] }] }] }] } };
   const savedVersion = { id: "version-1", name: "版本 1", notes: null, created_at: "2026-08-22T12:00:00Z", snapshot: { document: draft.document, config } };
   const request = vi.fn(async (path: string, method = "GET", body?: unknown) => {
@@ -48,6 +48,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={["/workbench/job-1"]}><NotificationProvider><Routes><Route path="/workbench/:jobId" element={<WorkbenchPage />} /></Routes></NotificationProvider></MemoryRouter>);
   expect(await screen.findByText("栏目与取舍")).toBeInTheDocument();
+  await user.type(screen.getByLabelText("项目经历最多使用"), "2");
   await user.selectOptions(screen.getByLabelText("模板"), "technical_double_column");
   await user.selectOptions(screen.getByLabelText("页数"), "2");
   const projectCard = screen.getByText("项目经历").closest("article");
@@ -58,6 +59,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const putConfig = request.mock.calls.find((call) => call[0].endsWith("/resume-config") && call[1] === "PUT");
   expect((putConfig?.[2] as { config: typeof config }).config.template).toBe("technical_double_column");
   expect((putConfig?.[2] as { config: typeof config }).config.page_target).toBe(2);
+  expect((putConfig?.[2] as { config: typeof config }).config.sections.find((section) => section.section_key === "project")?.max_entries).toBe(2);
   await user.clear(screen.getByLabelText("编辑影子项目"));
   await user.type(screen.getByLabelText("编辑影子项目"), "完成可恢复工作流");
   await user.click(screen.getByRole("button", { name: "保存草稿" }));

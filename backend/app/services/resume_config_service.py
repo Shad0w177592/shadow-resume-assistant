@@ -61,11 +61,14 @@ class ResumeConfigService:
 
     @staticmethod
     def default() -> dict[str, Any]:
+        sections = deepcopy(DEFAULT_SECTIONS)
+        for section in sections:
+            section["max_entries"] = None
         return {
             "template": "single_column",
             "page_target": 1,
             "strategies": ["concise", "jd_keywords", "ats"],
-            "sections": deepcopy(DEFAULT_SECTIONS),
+            "sections": sections,
             "entry_modes": {},
         }
 
@@ -81,10 +84,17 @@ class ResumeConfigService:
         return {
             "id": row[0],
             "job_target_id": job_id,
-            "config": json.loads(row[1]),
+            "config": self._with_defaults(json.loads(row[1])),
             "created_at": row[2],
             "updated_at": row[3],
         }
+
+    @staticmethod
+    def _with_defaults(config: dict[str, Any]) -> dict[str, Any]:
+        normalized = deepcopy(config)
+        for section in normalized.get("sections", []):
+            section.setdefault("max_entries", None)
+        return normalized
 
     def save(self, job_id: str, config: dict[str, Any]) -> dict[str, Any]:
         self.validate(config)
@@ -120,6 +130,12 @@ class ResumeConfigService:
         orders = [section.get("order") for section in sections]
         if len(orders) != len(set(orders)):
             raise ValueError("栏目顺序不能重复")
+        for section in sections:
+            limit = section.get("max_entries")
+            if limit is not None and (
+                isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20
+            ):
+                raise ValueError("每个栏目的经历条数必须为 1 到 20，或选择不限")
         valid_modes = {"must_include", "exclude_this_resume", "ai_decide"}
         if any(mode not in valid_modes for mode in (config.get("entry_modes") or {}).values()):
             raise ValueError("经历取舍模式无效")

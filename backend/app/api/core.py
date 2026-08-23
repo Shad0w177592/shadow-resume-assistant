@@ -37,6 +37,7 @@ class EntryInput(BaseModel):
     section_key: str = Field(min_length=1, max_length=80)
     title: str | None = Field(default=None, max_length=240)
     payload: dict[str, Any] = Field(default_factory=dict)
+    importance: int = Field(default=3, ge=1, le=5)
 
 
 class JobInput(BaseModel):
@@ -137,7 +138,7 @@ def create_entry(
     payload: EntryInput, app: Annotated[AppServices, Depends(services)]
 ) -> dict[str, Any]:
     return ProfileService(app.database).create_entry(
-        payload.section_key, payload.title, payload.payload
+        payload.section_key, payload.title, payload.payload, payload.importance
     )
 
 
@@ -147,7 +148,7 @@ def update_entry(
 ) -> dict[str, Any]:
     try:
         return ProfileService(app.database).update_entry(
-            entry_id, payload.section_key, payload.title, payload.payload
+            entry_id, payload.section_key, payload.title, payload.payload, payload.importance
         )
     except KeyError as error:
         raise _not_found(error) from error
@@ -348,9 +349,9 @@ async def transcribe_audio(
         raise HTTPException(status_code=422, detail="录音为空或超过 15MB")
     suffix = ".webm" if "webm" in (audio.content_type or "") else ".wav"
     try:
-        text = TranscriptionService(
-            app.credentials, app.paths.temp, app.database
-        ).transcribe(content, suffix)
+        text = TranscriptionService(app.credentials, app.paths.temp, app.database).transcribe(
+            content, suffix
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:

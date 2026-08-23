@@ -44,7 +44,7 @@ class ProfileService:
     def list_entries(self) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT id, section_key, title, payload_json, created_at, updated_at "
+                "SELECT id, section_key, title, payload_json, importance, created_at, updated_at "
                 "FROM profile_section_entry WHERE profile_id = ? AND deleted_at IS NULL "
                 "ORDER BY created_at, id",
                 (PROFILE_ID,),
@@ -52,24 +52,26 @@ class ProfileService:
         return [self._row_to_entry(row) for row in rows]
 
     def create_entry(
-        self, section_key: str, title: str | None, payload: dict[str, Any]
+        self, section_key: str, title: str | None, payload: dict[str, Any], importance: int = 3
     ) -> dict[str, Any]:
         if not section_key.strip():
             raise ValueError("section_key is required")
+        self._validate_importance(importance)
         entry_id = str(uuid4())
         now = utc_now()
         with self.database.connect() as connection:
             self._ensure_profile(connection, now)
             connection.execute(
                 "INSERT INTO profile_section_entry(id, profile_id, section_key, title, "
-                "payload_json, "
-                "schema_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+                "payload_json, importance, schema_version, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
                 (
                     entry_id,
                     PROFILE_ID,
                     section_key,
                     title,
                     json.dumps(payload, ensure_ascii=False),
+                    importance,
                     now,
                     now,
                 ),
@@ -79,7 +81,7 @@ class ProfileService:
     def get_entry(self, entry_id: str) -> dict[str, Any]:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT id, section_key, title, payload_json, created_at, updated_at "
+                "SELECT id, section_key, title, payload_json, importance, created_at, updated_at "
                 "FROM profile_section_entry WHERE id = ? AND profile_id = ? AND deleted_at IS NULL",
                 (entry_id, PROFILE_ID),
             ).fetchone()
@@ -88,17 +90,24 @@ class ProfileService:
         return self._row_to_entry(row)
 
     def update_entry(
-        self, entry_id: str, section_key: str, title: str | None, payload: dict[str, Any]
+        self,
+        entry_id: str,
+        section_key: str,
+        title: str | None,
+        payload: dict[str, Any],
+        importance: int = 3,
     ) -> dict[str, Any]:
+        self._validate_importance(importance)
         with self.database.connect() as connection:
             cursor = connection.execute(
                 "UPDATE profile_section_entry SET section_key=?, title=?, payload_json=?, "
-                "updated_at=? "
+                "importance=?, updated_at=? "
                 "WHERE id=? AND profile_id=? AND deleted_at IS NULL",
                 (
                     section_key,
                     title,
                     json.dumps(payload, ensure_ascii=False),
+                    importance,
                     utc_now(),
                     entry_id,
                     PROFILE_ID,
@@ -111,7 +120,9 @@ class ProfileService:
     def duplicate_entry(self, entry_id: str) -> dict[str, Any]:
         source = self.get_entry(entry_id)
         title = f"{source['title']}（副本）" if source["title"] else None
-        return self.create_entry(source["section_key"], title, source["payload"])
+        return self.create_entry(
+            source["section_key"], title, source["payload"], source["importance"]
+        )
 
     def delete_entry(self, entry_id: str) -> None:
         with self.database.connect() as connection:
@@ -121,6 +132,11 @@ class ProfileService:
             )
             if cursor.rowcount != 1:
                 raise KeyError(entry_id)
+
+    @staticmethod
+    def _validate_importance(importance: int) -> None:
+        if importance not in range(1, 6):
+            raise ValueError("重要程度必须在 1 到 5 之间")
 
     @staticmethod
     def _ensure_profile(connection, now: str) -> None:
@@ -138,6 +154,7 @@ class ProfileService:
             "section_key": row[1],
             "title": row[2],
             "payload": json.loads(row[3]),
-            "created_at": row[4],
-            "updated_at": row[5],
+            "importance": row[4],
+            "created_at": row[5],
+            "updated_at": row[6],
         }

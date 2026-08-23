@@ -3,6 +3,7 @@ export type ProfileEntry = {
   section_key: string;
   title: string | null;
   payload: Record<string, unknown>;
+  importance: number;
   created_at: string;
   updated_at: string;
 };

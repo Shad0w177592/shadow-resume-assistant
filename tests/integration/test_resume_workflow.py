@@ -201,9 +201,78 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
             headers=HEADERS,
             json={"jd_text": "熟悉 Python", "title": "AI Agent", "company": "甲"},
         ).json()
-        assert client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS).status_code == 200
+        assert (
+            client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS).status_code
+            == 200
+        )
         generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
         assert generated.status_code == 200, generated.text
-        text = generated.json()["document"]["sections"][0]["blocks"][0]["paragraphs"][0]["text"]
+        text = generated.json()["document"]["sections"][0]["blocks"][0]["paragraphs"][
+            0
+        ]["text"]
         assert "完成工作流" in text
     assert calls == ["job_parse", "resume_rewrite"]
+
+
+def test_generation_respects_section_limit_and_user_importance(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
+    app = create_app(tmp_path / "priority-data", InMemoryCredentialStore())
+    with TestClient(app) as client:
+        entries = []
+        for title, importance in (
+            ("用户置顶经历", 1),
+            ("高重要经历", 5),
+            ("普通经历", 3),
+        ):
+            entries.append(
+                client.post(
+                    "/api/profile/entries",
+                    headers=HEADERS,
+                    json={
+                        "section_key": "project",
+                        "title": title,
+                        "payload": {"content": "负责 Python 项目并完成交付"},
+                        "importance": importance,
+                    },
+                ).json()
+            )
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={
+                "jd_text": "负责 Python 项目交付",
+                "title": "项目岗位",
+                "company": "甲",
+            },
+        ).json()
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        for section in config["sections"]:
+            section["enabled"] = section["section_key"] == "project"
+            if section["section_key"] == "project":
+                section["max_entries"] = 2
+        config["entry_modes"] = {entries[0]["id"]: "must_include"}
+        saved = client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
+        assert saved.status_code == 200, saved.text
+
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+        blocks = generated.json()["document"]["sections"][0]["blocks"]
+        assert [block["heading"] for block in blocks] == [
+            "用户置顶经历",
+            "高重要经历",
+        ]
+        source_ids = [
+            source_id
+            for block in blocks
+            for paragraph in block["paragraphs"]
+            for source_id in paragraph["source_entry_ids"]
+        ]
+        assert entries[2]["id"] not in source_ids
