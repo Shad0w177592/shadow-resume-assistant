@@ -15,7 +15,7 @@ from app.domain.resume import (
 )
 from app.persistence.database import Database, utc_now
 from app.security.pii import redact_payload_for_ai, redact_personal_info
-from app.services.ai_schemas import RESUME_REWRITE_SCHEMA
+from app.services.ai_schemas import RESUME_REWRITE_SCHEMA, RESUME_TAILOR_SCHEMA
 from app.services.fact_checker import check_hard_facts, explain_violations
 from app.services.generation_service import SECTION_TITLES, GenerationService
 from app.services.job_analysis_service import JobAnalysisService
@@ -83,27 +83,50 @@ class ResumeWorkflowService:
 
             steps["GENERATE_SECTIONS"] = "running"
             document = self._build_document(config, profile["personal_info"], selected)
+            ai_addition_warnings: list[str] = []
             if self.provider:
                 self._rewrite_with_ai(document, selected, requirements, config)
+                ai_addition_warnings = self._tailor_summary_and_skills(
+                    document,
+                    selected,
+                    requirements,
+                    config,
+                    str(profile["personal_info"].get("summary") or ""),
+                )
             steps["GENERATE_SECTIONS"] = "completed"
 
             steps["DETERMINISTIC_FACT_CHECK"] = "running"
             entry_by_id = {entry["id"]: entry for entry in selected}
             violations = []
-            fact_warnings: list[str] = []
+            fact_warnings: list[str] = list(ai_addition_warnings)
             for section in document.sections:
                 for block in section.blocks:
                     for paragraph in block.paragraphs:
-                        source_texts = [
-                            json.dumps(
-                                {
-                                    "title": entry_by_id[str(source_id)]["title"],
-                                    "payload": entry_by_id[str(source_id)]["payload"],
-                                },
-                                ensure_ascii=False,
-                            )
-                            for source_id in paragraph.source_entry_ids
-                        ]
+                        if section.section_key == "summary":
+                            source_texts = [
+                                json.dumps(
+                                    {"summary": profile["personal_info"].get("summary") or ""},
+                                    ensure_ascii=False,
+                                ),
+                                *[
+                                    json.dumps(
+                                        {"title": entry["title"], "payload": entry["payload"]},
+                                        ensure_ascii=False,
+                                    )
+                                    for entry in selected
+                                ],
+                            ]
+                        else:
+                            source_texts = [
+                                json.dumps(
+                                    {
+                                        "title": entry_by_id[str(source_id)]["title"],
+                                        "payload": entry_by_id[str(source_id)]["payload"],
+                                    },
+                                    ensure_ascii=False,
+                                )
+                                for source_id in paragraph.source_entry_ids
+                            ]
                         result = check_hard_facts(source_texts, paragraph.text)
                         paragraph.risk_flags.extend(
                             violation
@@ -165,7 +188,7 @@ class ResumeWorkflowService:
         paragraphs = []
         entry_by_id = {entry["id"]: entry for entry in entries}
         for section in document.sections:
-            if section.section_key not in rewrite_sections:
+            if section.section_key not in rewrite_sections or section.section_key == "summary":
                 continue
             for block in section.blocks:
                 for paragraph in block.paragraphs:
@@ -205,6 +228,116 @@ class ResumeWorkflowService:
             raise AIProviderError("invalid_output", "AI 返回的段落范围不完整，未保存结果")
         for item in result["paragraphs"]:
             allowed[item["paragraph_id"]].text = item["text"].strip()
+
+    def _tailor_summary_and_skills(
+        self,
+        document: ResumeDocument,
+        entries: list[dict[str, Any]],
+        requirements: list[dict[str, Any]],
+        config: dict[str, Any],
+        original_summary: str,
+    ) -> list[str]:
+        assert self.provider is not None
+        rewrite_sections = set(config.get("rewrite_sections") or [])
+        if not rewrite_sections.intersection({"summary", "skills"}):
+            return []
+        result = self.provider.complete_json(
+            workflow="resume_tailor_profile",
+            instructions=(
+                "你是中文求职简历编辑器。根据岗位要求和候选人的真实经历完成两个任务。"
+                "自我介绍必须使用真实经历中的可迁移能力，说明这些能力如何胜任目标岗位；"
+                "不得编造公司、学校、岗位、日期、数字或成果。"
+                "专业技能可以按用户授权补充 1 至 2 条目标岗位能力，即使资料中没有直接写出；"
+                "这类补充会在生成后明确提示用户核实。技能描述要具体、可编辑，不要虚构任职经历。"
+                "只处理 payload 中标记为 true 的栏目。"
+            ),
+            payload={
+                "requirements": requirements,
+                "modify_summary": "summary" in rewrite_sections,
+                "modify_skills": "skills" in rewrite_sections,
+                "original_summary": original_summary,
+                "evidence": [
+                    {
+                        "section_key": entry["section_key"],
+                        "title": entry["title"],
+                        "payload": redact_payload_for_ai(entry["payload"]),
+                    }
+                    for entry in entries
+                ],
+            },
+            schema=RESUME_TAILOR_SCHEMA,
+        )
+        warnings: list[str] = []
+        if "summary" in rewrite_sections:
+            summary = result["summary"].strip()
+            if not summary:
+                raise AIProviderError("invalid_output", "AI 没有返回自我介绍，未保存本次结果")
+            summary_section = next(
+                (section for section in document.sections if section.section_key == "summary"),
+                None,
+            )
+            if summary_section is None:
+                raise AIProviderError("invalid_output", "自我介绍栏目缺失，未保存本次结果")
+            summary_section.blocks[0].paragraphs[0].text = summary
+        if "skills" in rewrite_sections:
+            additions = result["skills"][:2]
+            if not additions:
+                raise AIProviderError("invalid_output", "AI 没有返回岗位专业技能，未保存本次结果")
+            skills_section = next(
+                (section for section in document.sections if section.section_key == "skills"),
+                None,
+            )
+            if skills_section is None:
+                setting = next(
+                    item for item in config["sections"] if item["section_key"] == "skills"
+                )
+                skills_section = ResumeSection(
+                    section_id=str(uuid4()),
+                    section_key="skills",
+                    title=setting["title"],
+                    order=setting["order"],
+                    column=("full" if config["template"] == "single_column" else setting["column"]),
+                    blocks=[],
+                )
+                document.sections.append(skills_section)
+                document.sections.sort(key=lambda section: section.order)
+            existing = {
+                f"{block.heading.strip()}\n{paragraph.text.strip()}"
+                for block in skills_section.blocks
+                for paragraph in block.paragraphs
+            }
+            added_blocks = []
+            added_headings = []
+            for item in additions:
+                heading = item["heading"].strip()
+                text = item["text"].strip()
+                if not heading or not text or f"{heading}\n{text}" in existing:
+                    continue
+                added_headings.append(heading)
+                added_blocks.append(
+                    ResumeBlock(
+                        block_id=str(uuid4()),
+                        heading=heading,
+                        paragraphs=[
+                            ResumeParagraph(
+                                paragraph_id=str(uuid4()),
+                                text=text,
+                                source_entry_ids=[],
+                                risk_flags=["ai_added_skill"],
+                            )
+                        ],
+                    )
+                )
+            if not added_blocks:
+                raise AIProviderError(
+                    "invalid_output", "AI 返回的岗位专业技能与原内容重复，未保存本次结果"
+                )
+            skills_section.blocks = added_blocks + skills_section.blocks
+            warnings.append(
+                f"AI 为目标岗位补充了专业技能：{'、'.join(added_headings)}。"
+                "这些是 AI 根据岗位要求起草的内容，请确认自己确实掌握后再投递"
+            )
+        return warnings
 
     def _requirements(self, job_id: str) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
@@ -329,6 +462,37 @@ class ResumeWorkflowService:
         for entry in entries:
             grouped[entry["section_key"]].append(entry)
         sections = []
+        summary_setting = section_config["summary"]
+        summary_text = str(personal_info.get("summary") or "").strip()
+        if summary_setting["enabled"] and (
+            summary_text or "summary" in set(config.get("rewrite_sections") or [])
+        ):
+            sections.append(
+                ResumeSection(
+                    section_id=str(uuid4()),
+                    section_key="summary",
+                    title=summary_setting["title"],
+                    order=summary_setting["order"],
+                    column=(
+                        "full"
+                        if config["template"] == "single_column"
+                        else summary_setting["column"]
+                    ),
+                    blocks=[
+                        ResumeBlock(
+                            block_id=str(uuid4()),
+                            heading="",
+                            paragraphs=[
+                                ResumeParagraph(
+                                    paragraph_id=str(uuid4()),
+                                    text=summary_text,
+                                    source_entry_ids=[],
+                                )
+                            ],
+                        )
+                    ],
+                )
+            )
         for section_key, section_entries in grouped.items():
             setting = section_config[section_key]
             blocks = []
@@ -381,7 +545,7 @@ class ResumeWorkflowService:
             page_target=config["page_target"],
             personal_info=PersonalInfo(
                 name=str(personal_info.get("name") or ""),
-                headline=str(personal_info.get("summary") or ""),
+                headline="",
                 contacts=[
                     str(personal_info[key])
                     for key in ("phone", "email", "city")

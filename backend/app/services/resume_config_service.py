@@ -8,39 +8,39 @@ from uuid import uuid4
 from app.persistence.database import Database, utc_now
 
 DEFAULT_SECTIONS = [
-    {"section_key": "summary", "title": "自我介绍", "enabled": True, "order": 0, "column": "right"},
     {
         "section_key": "education",
         "title": "教育经历",
         "enabled": True,
-        "order": 1,
+        "order": 0,
         "column": "left",
     },
-    {"section_key": "work", "title": "工作经历", "enabled": True, "order": 2, "column": "right"},
+    {"section_key": "work", "title": "工作经历", "enabled": True, "order": 1, "column": "right"},
     {
         "section_key": "internship",
         "title": "实习经历",
         "enabled": True,
-        "order": 3,
+        "order": 2,
         "column": "right",
     },
-    {"section_key": "project", "title": "项目经历", "enabled": True, "order": 4, "column": "right"},
+    {"section_key": "project", "title": "项目经历", "enabled": True, "order": 3, "column": "right"},
     {
         "section_key": "campus",
         "title": "校园、社团及志愿经历",
         "enabled": False,
-        "order": 5,
+        "order": 4,
         "column": "left",
     },
-    {"section_key": "skills", "title": "专业技能", "enabled": True, "order": 6, "column": "left"},
+    {"section_key": "skills", "title": "专业技能", "enabled": True, "order": 5, "column": "left"},
     {
         "section_key": "awards",
         "title": "证书与奖项",
         "enabled": False,
-        "order": 7,
+        "order": 6,
         "column": "left",
     },
-    {"section_key": "other", "title": "其他经历", "enabled": False, "order": 8, "column": "right"},
+    {"section_key": "other", "title": "其他经历", "enabled": False, "order": 7, "column": "right"},
+    {"section_key": "summary", "title": "自我介绍", "enabled": True, "order": 8, "column": "right"},
 ]
 VALID_STRATEGIES = {
     "star",
@@ -95,21 +95,34 @@ class ResumeConfigService:
     def _with_defaults(config: dict[str, Any]) -> dict[str, Any]:
         normalized = deepcopy(config)
         sections = normalized.get("sections", [])
-        legacy_order = [
-            "summary",
-            "skills",
-            "project",
-            "work",
-            "internship",
-            "education",
-            "campus",
-            "awards",
-            "other",
+        historical_default_orders = [
+            [
+                "summary",
+                "skills",
+                "project",
+                "work",
+                "internship",
+                "education",
+                "campus",
+                "awards",
+                "other",
+            ],
+            [
+                "summary",
+                "education",
+                "work",
+                "internship",
+                "project",
+                "campus",
+                "skills",
+                "awards",
+                "other",
+            ],
         ]
         current_order = [
             item["section_key"] for item in sorted(sections, key=lambda item: item["order"])
         ]
-        if current_order == legacy_order:
+        if current_order in historical_default_orders:
             new_order = {item["section_key"]: item["order"] for item in DEFAULT_SECTIONS}
             for section in sections:
                 section["order"] = new_order[section["section_key"]]

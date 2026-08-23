@@ -304,7 +304,7 @@ def test_generation_respects_section_limit_and_user_importance(
         assert entries[2]["id"] not in source_ids
 
 
-def test_only_selected_sections_are_rewritten_and_reordered(
+def test_selected_summary_and_skills_are_tailored_without_changing_work(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
@@ -321,6 +321,17 @@ def test_only_selected_sections_are_rewritten_and_reordered(
                         "source_text": "熟悉 AI 工具",
                     }
                 ]
+            }
+        if request["workflow"] == "resume_tailor_profile":
+            return {
+                "summary": "传媒工作培养了沟通协作能力，能够用于 AI 项目需求澄清与跨团队推进。",
+                "skills": [
+                    {
+                        "heading": "AI Agent 项目交付",
+                        "text": "能够使用 Codex 完成 AI 项目从0到1搭建。",
+                        "reason": "岗位要求 AI 工具与项目落地能力",
+                    }
+                ],
             }
         requests.append(request)
         return {
@@ -339,6 +350,11 @@ def test_only_selected_sections_are_rewritten_and_reordered(
     credentials.set("sk-test-key")
     app = create_app(tmp_path / "selected-sections", credentials)
     with TestClient(app) as client:
+        client.put(
+            "/api/profile",
+            headers=HEADERS,
+            json={"personal_info": {"name": "杨丰铭", "summary": "原来的自我介绍"}},
+        )
         first_work = client.post(
             "/api/profile/entries",
             headers=HEADERS,
@@ -378,9 +394,9 @@ def test_only_selected_sections_are_rewritten_and_reordered(
         config = client.get(
             f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
         ).json()["config"]
-        config["rewrite_sections"] = ["skills"]
+        config["rewrite_sections"] = ["summary", "skills"]
         for section in config["sections"]:
-            section["enabled"] = section["section_key"] in {"work", "skills"}
+            section["enabled"] = section["section_key"] in {"work", "skills", "summary"}
         saved = client.put(
             f"/api/jobs/{job['id']}/resume-config",
             headers=HEADERS,
@@ -390,10 +406,16 @@ def test_only_selected_sections_are_rewritten_and_reordered(
 
         generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
         assert generated.status_code == 200, generated.text
+        body = generated.json()
         sections = {
-            section["section_key"]: section
-            for section in generated.json()["document"]["sections"]
+            section["section_key"]: section for section in body["document"]["sections"]
         }
+        assert body["document"]["personal_info"]["headline"] == ""
+        assert list(sections)[-1] == "summary"
+        assert (
+            sections["summary"]["blocks"][0]["paragraphs"][0]["text"]
+            == "传媒工作培养了沟通协作能力，能够用于 AI 项目需求澄清与跨团队推进。"
+        )
         assert [block["heading"] for block in sections["work"]["blocks"]] == [
             "先录入的工作",
             "后录入但高重要",
@@ -401,8 +423,16 @@ def test_only_selected_sections_are_rewritten_and_reordered(
         assert [
             block["paragraphs"][0]["text"] for block in sections["work"]["blocks"]
         ] == ["保持原文一", "保持原文二"]
-        assert sections["skills"]["blocks"][0]["paragraphs"][0]["text"].endswith(
-            "（AI 已改写）"
+        assert sections["skills"]["blocks"][0]["heading"] == "AI Agent 项目交付"
+        original_skill = next(
+            block
+            for block in sections["skills"]["blocks"]
+            if block["heading"] == "AI 工具"
+        )
+        assert original_skill["paragraphs"][0]["text"].endswith("（AI 已改写）")
+        assert any(
+            "AI 为目标岗位补充了专业技能：AI Agent 项目交付" in warning
+            for warning in body["fact_warnings"]
         )
         assert len(requests) == 1
         sent_source_ids = [

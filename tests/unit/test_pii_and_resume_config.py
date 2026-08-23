@@ -44,7 +44,6 @@ def test_default_resume_sections_keep_experience_before_skills() -> None:
     assert default["rewrite_sections"] == ["summary", "skills"]
     sections = sorted(default["sections"], key=lambda item: item["order"])
     assert [item["section_key"] for item in sections] == [
-        "summary",
         "education",
         "work",
         "internship",
@@ -53,6 +52,7 @@ def test_default_resume_sections_keep_experience_before_skills() -> None:
         "skills",
         "awards",
         "other",
+        "summary",
     ]
 
 
@@ -75,11 +75,12 @@ def test_legacy_default_order_is_upgraded_for_existing_jobs() -> None:
     upgraded = ResumeConfigService._with_defaults(legacy)
     ordered = sorted(upgraded["sections"], key=lambda item: item["order"])
     assert [item["section_key"] for item in ordered[:3]] == [
-        "summary",
         "education",
         "work",
+        "internship",
     ]
-    assert [item["section_key"] for item in ordered].index("skills") == 6
+    assert [item["section_key"] for item in ordered][-1] == "summary"
+    assert [item["section_key"] for item in ordered].index("skills") == 5
 
 
 def test_nested_evidence_payload_masks_pii_before_ai_request() -> None:

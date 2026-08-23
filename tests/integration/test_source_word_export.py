@@ -102,6 +102,16 @@ def test_word_source_export_preserves_format_and_reorders_entries(
             json={"jd_text": "乙公司相关岗位", "title": "运营", "company": "目标公司"},
         ).json()
         client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS)
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        config["rewrite_sections"] = ["work"]
+        saved = client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
+        assert saved.status_code == 200, saved.text
         generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
         assert generated.status_code == 200, generated.text
         draft = generated.json()

@@ -43,6 +43,30 @@ RESUME_REWRITE_SCHEMA = {
     },
 }
 
+
+RESUME_TAILOR_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["summary", "skills"],
+    "properties": {
+        "summary": {"type": "string"},
+        "skills": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["heading", "text", "reason"],
+                "properties": {
+                    "heading": {"type": "string"},
+                    "text": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
 EDIT_REWRITE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
