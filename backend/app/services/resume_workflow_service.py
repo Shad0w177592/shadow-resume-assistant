@@ -160,10 +160,13 @@ class ResumeWorkflowService:
         config: dict[str, Any],
     ) -> None:
         assert self.provider is not None
+        rewrite_sections = set(config.get("rewrite_sections") or [])
         allowed = {}
         paragraphs = []
         entry_by_id = {entry["id"]: entry for entry in entries}
         for section in document.sections:
+            if section.section_key not in rewrite_sections:
+                continue
             for block in section.blocks:
                 for paragraph in block.paragraphs:
                     paragraph_id = str(paragraph.paragraph_id)
@@ -180,10 +183,13 @@ class ResumeWorkflowService:
                             "current_text": paragraph.text,
                         }
                     )
+        if not paragraphs:
+            return
         result = self.provider.complete_json(
             workflow="resume_rewrite",
             instructions=(
-                "你是中文简历编辑器。只重写给定段落，不新增公司、岗位、学校、日期、技能、数字或成果。"
+                "你是中文简历编辑器。只重写用户勾选栏目中给定的段落；未勾选栏目不会发送给你。"
+                "不新增公司、岗位、学校、日期、技能、数字或成果。"
                 "每个 paragraph_id 必须原样返回且只返回一次；"
                 "按用户选择的 STAR/CAR/成果优先等策略组织已有事实。"
             ),
@@ -232,7 +238,7 @@ class ResumeWorkflowService:
                 evidence_scores[entry_id] += 2 if status == "full" else 1
         selected = []
         warnings = []
-        for entry in entries:
+        for source_index, entry in enumerate(entries):
             mode = modes.get(entry["id"], "ai_decide")
             if mode == "exclude_this_resume" or entry["section_key"] not in enabled:
                 continue
@@ -242,13 +248,21 @@ class ResumeWorkflowService:
             item = dict(entry)
             item["selection_mode"] = mode
             item["relevance_score"] = evidence_scores[entry["id"]]
+            item["source_index"] = source_index
             selected.append(item)
+        section_order = {section["section_key"]: section["order"] for section in config["sections"]}
+        rewrite_sections = set(config.get("rewrite_sections") or [])
         selected.sort(
             key=lambda item: (
-                item["selection_mode"] != "must_include",
-                -item.get("importance", 3),
-                -item["relevance_score"],
-                item["created_at"],
+                section_order.get(item["section_key"], 999),
+                (
+                    item["selection_mode"] != "must_include",
+                    -item.get("importance", 3),
+                    -item["relevance_score"],
+                    item["source_index"],
+                )
+                if item["section_key"] in rewrite_sections
+                else (False, 0, 0, item["source_index"]),
             )
         )
         return selected, warnings
@@ -285,13 +299,19 @@ class ResumeWorkflowService:
         }
         maximum = limits[(config["template"], config["page_target"])]
         result = list(entries)
+        rewrite_sections = set(config.get("rewrite_sections") or [])
 
         def size() -> int:
             return sum(len(json.dumps(item["payload"], ensure_ascii=False)) for item in result)
 
         while size() > maximum:
             removable = next(
-                (item for item in reversed(result) if item["selection_mode"] != "must_include"),
+                (
+                    item
+                    for item in reversed(result)
+                    if item["selection_mode"] != "must_include"
+                    and item["section_key"] in rewrite_sections
+                ),
                 None,
             )
             if removable is None:

@@ -206,6 +206,15 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
             client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS).status_code
             == 200
         )
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        config["rewrite_sections"] = ["project"]
+        client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
         generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
         assert generated.status_code == 200, generated.text
         body = generated.json()
@@ -266,6 +275,7 @@ def test_generation_respects_section_limit_and_user_importance(
         config = client.get(
             f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
         ).json()["config"]
+        config["rewrite_sections"] = ["project"]
         for section in config["sections"]:
             section["enabled"] = section["section_key"] == "project"
             if section["section_key"] == "project":
@@ -292,3 +302,114 @@ def test_generation_respects_section_limit_and_user_importance(
             for source_id in paragraph["source_entry_ids"]
         ]
         assert entries[2]["id"] not in source_ids
+
+
+def test_only_selected_sections_are_rewritten_and_reordered(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
+    monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI", raising=False)
+    requests = []
+
+    def complete_json(self, **request):
+        if request["workflow"] == "job_parse":
+            return {
+                "requirements": [
+                    {
+                        "requirement_type": "must_have",
+                        "summary": "熟悉 AI 工具",
+                        "source_text": "熟悉 AI 工具",
+                    }
+                ]
+            }
+        requests.append(request)
+        return {
+            "paragraphs": [
+                {
+                    "paragraph_id": item["paragraph_id"],
+                    "text": item["current_text"] + "（AI 已改写）",
+                    "reason": "贴合岗位",
+                }
+                for item in request["payload"]["paragraphs"]
+            ]
+        }
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "selected-sections", credentials)
+    with TestClient(app) as client:
+        first_work = client.post(
+            "/api/profile/entries",
+            headers=HEADERS,
+            json={
+                "section_key": "work",
+                "title": "先录入的工作",
+                "payload": {"content": "保持原文一"},
+                "importance": 1,
+            },
+        ).json()
+        second_work = client.post(
+            "/api/profile/entries",
+            headers=HEADERS,
+            json={
+                "section_key": "work",
+                "title": "后录入但高重要",
+                "payload": {"content": "保持原文二"},
+                "importance": 5,
+            },
+        ).json()
+        skill = client.post(
+            "/api/profile/entries",
+            headers=HEADERS,
+            json={
+                "section_key": "skills",
+                "title": "AI 工具",
+                "payload": {"content": "会使用 Codex"},
+                "importance": 3,
+            },
+        ).json()
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": "熟悉 AI 工具", "title": "AI 岗位", "company": "甲"},
+        ).json()
+        client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS)
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        config["rewrite_sections"] = ["skills"]
+        for section in config["sections"]:
+            section["enabled"] = section["section_key"] in {"work", "skills"}
+        saved = client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
+        assert saved.status_code == 200, saved.text
+
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+        sections = {
+            section["section_key"]: section
+            for section in generated.json()["document"]["sections"]
+        }
+        assert [block["heading"] for block in sections["work"]["blocks"]] == [
+            "先录入的工作",
+            "后录入但高重要",
+        ]
+        assert [
+            block["paragraphs"][0]["text"] for block in sections["work"]["blocks"]
+        ] == ["保持原文一", "保持原文二"]
+        assert sections["skills"]["blocks"][0]["paragraphs"][0]["text"].endswith(
+            "（AI 已改写）"
+        )
+        assert len(requests) == 1
+        sent_source_ids = [
+            source_id
+            for paragraph in requests[0]["payload"]["paragraphs"]
+            for source_id in paragraph["source_entry_ids"]
+        ]
+        assert sent_source_ids == [skill["id"]]
+        assert first_work["id"] not in sent_source_ids
+        assert second_work["id"] not in sent_source_ids

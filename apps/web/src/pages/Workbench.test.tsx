@@ -12,7 +12,7 @@ afterEach(() => {
 
 test("workbench saves layout choices, generates, edits and saves a draft", async () => {
   const config = {
-    template: "single_column", page_target: 1, strategies: ["concise"], entry_modes: {},
+    template: "single_column", page_target: 1, strategies: ["concise"], entry_modes: {}, rewrite_sections: ["skills"],
     sections: [
       { section_key: "project", title: "项目经历", enabled: true, order: 0, column: "right", max_entries: null },
       { section_key: "skills", title: "专业技能", enabled: true, order: 1, column: "left", max_entries: null },
@@ -56,6 +56,9 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const skillsCard = screen.getByText("专业技能").closest("article");
   fireEvent.dragStart(skillsCard!); fireEvent.dragOver(projectCard!); fireEvent.drop(projectCard!);
   await user.click(screen.getByRole("button", { name: "生成简历" }));
+  expect(await screen.findByText("选择需要 AI 修改的栏目")).toBeInTheDocument();
+  expect(screen.getByText(/未勾选栏目会保留原有文字和条目顺序/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "按所选栏目生成" }));
   expect(await screen.findByDisplayValue("完成工作流")).toBeInTheDocument();
   expect(await screen.findByText("简历已生成，请核实 AI 补充内容")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "取消提醒并保留简历" }));
@@ -65,6 +68,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect((putConfig?.[2] as { config: typeof config }).config.template).toBe("technical_double_column");
   expect((putConfig?.[2] as { config: typeof config }).config.page_target).toBe(2);
   expect((putConfig?.[2] as { config: typeof config }).config.sections.find((section) => section.section_key === "project")?.max_entries).toBe(2);
+  expect((putConfig?.[2] as { config: typeof config }).config.rewrite_sections).toEqual(["skills"]);
   await user.click(screen.getByRole("button", { name: "润色" }));
   await user.click(screen.getByText("补充经历"));
   await user.click(screen.getByRole("button", { name: "开始润色" }));

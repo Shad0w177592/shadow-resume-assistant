@@ -35,12 +35,14 @@ def test_resume_config_rejects_invalid_layout_strategy_and_modes() -> None:
         ResumeConfigService.validate({**config, "strategies": []})
     with pytest.raises(ValueError, match="经历取舍"):
         ResumeConfigService.validate({**config, "entry_modes": {"entry": "fabricate"}})
+    with pytest.raises(ValueError, match="AI 修改栏目"):
+        ResumeConfigService.validate({**config, "rewrite_sections": ["unknown"]})
 
 
 def test_default_resume_sections_keep_experience_before_skills() -> None:
-    sections = sorted(
-        ResumeConfigService.default()["sections"], key=lambda item: item["order"]
-    )
+    default = ResumeConfigService.default()
+    assert default["rewrite_sections"] == ["summary", "skills"]
+    sections = sorted(default["sections"], key=lambda item: item["order"])
     assert [item["section_key"] for item in sections] == [
         "summary",
         "education",

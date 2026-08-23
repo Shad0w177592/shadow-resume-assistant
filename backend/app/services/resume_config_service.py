@@ -53,6 +53,7 @@ VALID_STRATEGIES = {
     "quantified",
     "ats",
 }
+VALID_SECTION_KEYS = {item["section_key"] for item in DEFAULT_SECTIONS}
 
 
 class ResumeConfigService:
@@ -70,6 +71,7 @@ class ResumeConfigService:
             "strategies": ["concise", "jd_keywords", "ats"],
             "sections": sections,
             "entry_modes": {},
+            "rewrite_sections": ["summary", "skills"],
         }
 
     def get(self, job_id: str) -> dict[str, Any]:
@@ -113,6 +115,7 @@ class ResumeConfigService:
                 section["order"] = new_order[section["section_key"]]
         for section in normalized.get("sections", []):
             section.setdefault("max_entries", None)
+        normalized.setdefault("rewrite_sections", ["summary", "skills"])
         return normalized
 
     def save(self, job_id: str, config: dict[str, Any]) -> dict[str, Any]:
@@ -158,3 +161,11 @@ class ResumeConfigService:
         valid_modes = {"must_include", "exclude_this_resume", "ai_decide"}
         if any(mode not in valid_modes for mode in (config.get("entry_modes") or {}).values()):
             raise ValueError("经历取舍模式无效")
+        rewrite_sections = config.get("rewrite_sections", [])
+        if not isinstance(rewrite_sections, list) or any(
+            not isinstance(section_key, str) or section_key not in VALID_SECTION_KEYS
+            for section_key in rewrite_sections
+        ):
+            raise ValueError("AI 修改栏目无效")
+        if len(rewrite_sections) != len(set(rewrite_sections)):
+            raise ValueError("AI 修改栏目不能重复")
