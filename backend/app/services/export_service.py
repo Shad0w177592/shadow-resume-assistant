@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from uuid import uuid4
 
 from app.domain.resume import ResumeDocument
 from app.persistence.database import Database
@@ -10,6 +11,7 @@ from app.services.generation_service import GenerationService
 from app.services.resume_export import to_docx, to_pdf
 from app.services.source_word_export import SourceWordExport
 from app.services.version_service import VersionService
+from app.services.word_pdf_conversion import word_to_pdf
 
 
 class ExportService:
@@ -56,20 +58,36 @@ class ExportService:
         safe_name = self._safe_filename(filename)
         photo_path = self._photo_path(document.personal_info.photo_file_id)
         outputs = []
-        for output_format in dict.fromkeys(formats):
+        requested_formats = list(dict.fromkeys(formats))
+        for output_format in requested_formats:
             if output_format not in {"docx", "pdf"}:
                 raise ValueError("仅支持 Word 和 PDF")
-            target = self.paths.exports / f"{safe_name}.{output_format}"
-            if output_format == "docx":
-                if source_word:
-                    self.source_word.write(source_word, target)
+        source_docx = None
+        temporary_docx = None
+        if source_word:
+            if "docx" in requested_formats:
+                source_docx = self.paths.exports / f"{safe_name}.docx"
+            elif "pdf" in requested_formats:
+                temporary_docx = self.paths.temp / f"{safe_name}-{uuid4().hex}.docx"
+                source_docx = temporary_docx
+            if source_docx:
+                self.source_word.write(source_word, source_docx)
+        try:
+            for output_format in requested_formats:
+                target = self.paths.exports / f"{safe_name}.{output_format}"
+                if output_format == "docx":
+                    if not source_word:
+                        to_docx(document, target, photo_path=photo_path)
+                elif source_docx:
+                    word_to_pdf(source_docx, target)
                 else:
-                    to_docx(document, target, photo_path=photo_path)
-            else:
-                to_pdf(document, target, photo_path=photo_path)
-            if not target.is_file() or target.stat().st_size == 0:
-                raise RuntimeError(f"导出文件生成失败：{target.name}")
-            outputs.append(str(target))
+                    to_pdf(document, target, photo_path=photo_path)
+                if not target.is_file() or target.stat().st_size == 0:
+                    raise RuntimeError(f"导出文件生成失败：{target.name}")
+                outputs.append(str(target))
+        finally:
+            if temporary_docx:
+                temporary_docx.unlink(missing_ok=True)
         return {
             "files": outputs,
             "page_target": document.page_target,

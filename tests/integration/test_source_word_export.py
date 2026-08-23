@@ -545,3 +545,58 @@ def test_imported_word_never_silently_falls_back_to_generated_template(
         assert not (
             tmp_path / "no-fallback-data" / "exports" / "不得回退.docx"
         ).exists()
+
+
+def test_source_word_pdf_is_converted_from_the_final_word(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "source-word-export")
+    source = tmp_path / "同版来源.docx"
+    original = Document()
+    original.add_paragraph("工作经历")
+    _experience(original, "唯一公司", "唯一工作内容")
+    original.save(source)
+    converted = {}
+
+    def fake_word_to_pdf(source_docx: Path, target_pdf: Path) -> None:
+        converted["source"] = source_docx
+        converted["target"] = target_pdf
+        text = "\n".join(paragraph.text for paragraph in Document(source_docx).paragraphs)
+        assert text.count("唯一公司") == 1
+        assert text.count("唯一工作内容") == 1
+        target_pdf.write_bytes(b"%PDF-from-final-word")
+
+    monkeypatch.setattr("app.services.export_service.word_to_pdf", fake_word_to_pdf)
+    app = create_app(tmp_path / "same-layout-data", InMemoryCredentialStore())
+    with TestClient(app) as client:
+        imported = client.post(
+            "/api/imports/from-path", headers=HEADERS, json={"path": str(source)}
+        ).json()
+        confirmed = client.post(
+            f"/api/imports/{imported['id']}/confirm",
+            headers=HEADERS,
+            json={
+                "decisions": [
+                    {"candidate_id": item["id"], "action": "accept"}
+                    for item in imported["candidates"]
+                ]
+            },
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": "工作经验", "title": "岗位", "company": "公司"},
+        ).json()
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+        exported = client.post(
+            f"/api/jobs/{job['id']}/export",
+            headers=HEADERS,
+            json={"filename": "同版导出", "formats": ["docx", "pdf"]},
+        )
+        assert exported.status_code == 200, exported.text
+        word_path, pdf_path = map(Path, exported.json()["files"])
+
+    assert converted == {"source": word_path, "target": pdf_path}
+    assert pdf_path.read_bytes() == b"%PDF-from-final-word"
