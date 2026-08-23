@@ -49,3 +49,15 @@ EDIT_REWRITE_SCHEMA = {
     "required": ["text", "reason"],
     "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
 }
+
+
+FABRICATED_EXPERIENCE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["heading", "meta", "text"],
+    "properties": {
+        "heading": {"type": "string"},
+        "meta": {"type": "string"},
+        "text": {"type": "string"},
+    },
+}

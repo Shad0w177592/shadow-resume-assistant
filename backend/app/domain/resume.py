@@ -14,7 +14,7 @@ class ResumeTemplate(StrEnum):
 class ResumeParagraph(BaseModel):
     paragraph_id: str
     text: str
-    source_entry_ids: list[UUID] = Field(min_length=1)
+    source_entry_ids: list[UUID] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)
 
 
@@ -46,6 +46,7 @@ class ResumeDocument(BaseModel):
     resume_id: UUID
     template: ResumeTemplate
     page_target: int = Field(ge=1, le=2)
+    layout_density: str = "auto"
     personal_info: PersonalInfo
     sections: list[ResumeSection]
 

@@ -22,6 +22,7 @@ from app.services.job_service import JobService
 from app.services.openai_provider import AIProviderError, OpenAITextProvider, provider_error_status
 from app.services.profile_service import ProfileService
 from app.services.resume_config_service import ResumeConfigService
+from app.services.resume_polish_service import ResumePolishService
 from app.services.resume_workflow_service import ResumeWorkflowService
 from app.services.transcription_service import TranscriptionService
 from app.services.version_service import VersionService
@@ -53,6 +54,11 @@ class ResumeConfigInput(BaseModel):
 
 class DraftInput(BaseModel):
     document: dict[str, Any]
+
+
+class PolishInput(BaseModel):
+    methods: list[str] = Field(min_length=1)
+    allow_fabrication: bool = False
 
 
 class ProposalInput(BaseModel):
@@ -226,6 +232,24 @@ def delete_job(job_id: str, app: Annotated[AppServices, Depends(services)]) -> R
 def generate(job_id: str, app: Annotated[AppServices, Depends(services)]) -> dict[str, Any]:
     try:
         return ResumeWorkflowService(app.database, _text_provider(app)).generate(job_id)
+    except KeyError as error:
+        raise _not_found(error) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except AIProviderError as error:
+        raise _ai_error(error) from error
+
+
+@router.post("/jobs/{job_id}/polish")
+def polish_resume(
+    job_id: str,
+    payload: PolishInput,
+    app: Annotated[AppServices, Depends(services)],
+) -> dict[str, Any]:
+    try:
+        return ResumePolishService(app.database, _text_provider(app)).polish(
+            job_id, payload.methods, payload.allow_fabrication
+        )
     except KeyError as error:
         raise _not_found(error) from error
     except ValueError as error:

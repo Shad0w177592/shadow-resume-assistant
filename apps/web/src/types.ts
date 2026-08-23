@@ -33,6 +33,7 @@ export type ResumeDraft = {
     sections: Array<{
       section_id: string;
       section_key: string;
+    layout_density?: "auto" | "expanded" | "compact";
       title: string;
       order: number;
       column: string;
@@ -40,7 +41,7 @@ export type ResumeDraft = {
         block_id: string;
         heading: string;
         meta: string;
-        paragraphs: Array<{ paragraph_id: string; text: string; source_entry_ids: string[] }>;
+        paragraphs: Array<{ paragraph_id: string; text: string; source_entry_ids: string[]; risk_flags?: string[] }>;
       }>;
     }>;
   };

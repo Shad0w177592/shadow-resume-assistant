@@ -28,6 +28,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     if (path.endsWith("/versions") && method === "GET") return [];
     if (path.endsWith("/resume-config") && method === "PUT") return body;
     if (path.endsWith("/generate")) return draft;
+    if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/draft") && method === "PUT") return { ...draft, ...(body as object) };
@@ -60,6 +61,14 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect((putConfig?.[2] as { config: typeof config }).config.template).toBe("technical_double_column");
   expect((putConfig?.[2] as { config: typeof config }).config.page_target).toBe(2);
   expect((putConfig?.[2] as { config: typeof config }).config.sections.find((section) => section.section_key === "project")?.max_entries).toBe(2);
+  await user.click(screen.getByRole("button", { name: "润色" }));
+  await user.click(screen.getByText("补充经历"));
+  await user.click(screen.getByRole("button", { name: "开始润色" }));
+  expect(await screen.findByText("确认 AI 编造风险")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "我已了解风险，继续编造" }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/polish", "POST", { methods: ["add_experience"], allow_fabrication: true }));
+  expect(screen.queryByText("确认 AI 编造风险")).not.toBeInTheDocument();
+
   await user.clear(screen.getByLabelText("编辑影子项目"));
   await user.type(screen.getByLabelText("编辑影子项目"), "完成可恢复工作流");
   await user.click(screen.getByRole("button", { name: "保存草稿" }));
