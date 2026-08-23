@@ -37,6 +37,49 @@ def test_resume_config_rejects_invalid_layout_strategy_and_modes() -> None:
         ResumeConfigService.validate({**config, "entry_modes": {"entry": "fabricate"}})
 
 
+def test_default_resume_sections_keep_experience_before_skills() -> None:
+    sections = sorted(
+        ResumeConfigService.default()["sections"], key=lambda item: item["order"]
+    )
+    assert [item["section_key"] for item in sections] == [
+        "summary",
+        "education",
+        "work",
+        "internship",
+        "project",
+        "campus",
+        "skills",
+        "awards",
+        "other",
+    ]
+
+
+def test_legacy_default_order_is_upgraded_for_existing_jobs() -> None:
+    legacy = ResumeConfigService.default()
+    legacy_order = [
+        "summary",
+        "skills",
+        "project",
+        "work",
+        "internship",
+        "education",
+        "campus",
+        "awards",
+        "other",
+    ]
+    order_by_key = {key: order for order, key in enumerate(legacy_order)}
+    for section in legacy["sections"]:
+        section["order"] = order_by_key[section["section_key"]]
+    upgraded = ResumeConfigService._with_defaults(legacy)
+    ordered = sorted(upgraded["sections"], key=lambda item: item["order"])
+    assert [item["section_key"] for item in ordered[:3]] == [
+        "summary",
+        "education",
+        "work",
+    ]
+    assert [item["section_key"] for item in ordered].index("skills") == 6
+
+
 def test_nested_evidence_payload_masks_pii_before_ai_request() -> None:
     redacted = redact_payload_for_ai(
         {

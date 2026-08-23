@@ -123,7 +123,7 @@ class ResumeWorkflowService:
             steps["LAYOUT_CHECK"] = "running"
             layout = self._layout(config, document)
             if layout["status"] == "overflow":
-                raise ValueError("内容超出所选页数，请减少非必须内容或切换两页")
+                warnings.append("内容可能超出所选页数；草稿已生成，请在导出前调整内容或页数")
             if layout["status"] == "underfilled":
                 warnings.append("页面内容偏少；不会为填满页面扩写虚假内容")
             steps["LAYOUT_CHECK"] = "completed"
@@ -314,20 +314,29 @@ class ResumeWorkflowService:
             blocks = []
             for entry in section_entries:
                 payload = entry["payload"]
-                text = "；".join(
-                    str(value).strip()
-                    for value in payload.values()
-                    if value and not isinstance(value, dict)
+                source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+                content = str(payload.get("content") or "").strip()
+                text = (
+                    ResumeWorkflowService._source_body_text(section_key, content, source)
+                    if source and content
+                    else "；".join(
+                        str(value).strip()
+                        for value in payload.values()
+                        if value and not isinstance(value, dict)
+                    )
+                )
+                meta = (
+                    content.splitlines()[0].strip()
+                    if source and content
+                    else " · ".join(
+                        str(payload[key]) for key in ("organization", "time") if payload.get(key)
+                    )
                 )
                 blocks.append(
                     ResumeBlock(
                         block_id=str(uuid4()),
                         heading=entry["title"] or str(payload.get("title") or ""),
-                        meta=" · ".join(
-                            str(payload[key])
-                            for key in ("organization", "time")
-                            if payload.get(key)
-                        ),
+                        meta=meta,
                         paragraphs=[
                             ResumeParagraph(
                                 paragraph_id=str(uuid4()), text=text, source_entry_ids=[entry["id"]]
@@ -362,6 +371,25 @@ class ResumeWorkflowService:
             ),
             sections=sections,
         )
+
+    @staticmethod
+    def _source_body_text(section_key: str, content: str, source: dict[str, Any]) -> str:
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        block_count = len(source.get("block_ids") or [])
+        experience_sections = {
+            "education",
+            "work",
+            "internship",
+            "project",
+            "campus",
+            "awards",
+            "other",
+        }
+        if section_key in experience_sections and block_count >= 3 and len(lines) >= 3:
+            return "\n".join(lines[2:])
+        if section_key in experience_sections and block_count >= 2 and len(lines) >= 2:
+            return "\n".join(lines[1:])
+        return content
 
     @staticmethod
     def _layout(config: dict[str, Any], document: ResumeDocument) -> dict[str, Any]:

@@ -33,7 +33,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/draft") && method === "PUT") return { ...draft, ...(body as object) };
     if (path.endsWith("/versions") && method === "POST") return savedVersion;
-    if (path.endsWith("/export") && method === "POST") return { files: ["杨丰铭-简历.docx", "杨丰铭-简历.pdf"] };
+    if (path.endsWith("/export") && method === "POST") return { files: ["杨丰铭-简历.docx", "杨丰铭-简历.pdf"], word_mode: "source_format" };
     if (path === "/api/versions/version-1/compare" && method === "POST") return { changes: [{ block_id: "p-1", change: "modified" }] };
     if (path === "/api/versions/version-1/restore" && method === "POST") return draft;
     if (path === "/api/versions/version-1" && method === "PATCH") return { ...savedVersion, ...(body as object) };
@@ -81,6 +81,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/versions", "POST", { name: "版本 1", notes: null }));
   await user.click(screen.getByRole("button", { name: "导出" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/export", "POST", expect.objectContaining({ formats: ["docx", "pdf"] })));
+  expect(await screen.findByText(/Word 已保留原文件排版/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "历史版本" }));
   expect(await screen.findByText("版本 1")).toBeInTheDocument();
   vi.spyOn(window, "prompt").mockReturnValueOnce("投递版").mockReturnValueOnce("已核对");

@@ -56,7 +56,8 @@ export function ImportPage() {
       section_key: sections[item.id],
     }));
     const summary = await apiRequest<{ accepted: number; ignored: number }>(`/api/imports/${result.id}/confirm`, "POST", { decisions });
-    notify(`已写入 ${summary.accepted} 条，忽略 ${summary.ignored} 条`, "success");
+    const wordHint = result.original_name.toLowerCase().endsWith(".docx") ? "；后续导出 Word 时将保留原文件排版" : "";
+    notify(`已写入 ${summary.accepted} 条，忽略 ${summary.ignored} 条${wordHint}`, "success");
   }
 
   const original = result?.parsed.pages.flatMap((page) => page.blocks.map((block) => ({ ...block, page: page.page_number }))) || [];

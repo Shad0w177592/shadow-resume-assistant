@@ -34,5 +34,6 @@ test("import candidates are shown beside source and require explicit confirmatio
   expect(screen.getByText("归类不确定")).toBeInTheDocument();
   expect(screen.getByText("疑似重复")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "确认写入资料库" }));
-  expect(await screen.findByText("已写入 1 条，忽略 0 条")).toBeInTheDocument();
+  expect(await screen.findByText(/已写入 1 条，忽略 0 条/)).toBeInTheDocument();
+  expect(screen.getByText(/后续导出 Word 时将保留原文件排版/)).toBeInTheDocument();
 });

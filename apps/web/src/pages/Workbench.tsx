@@ -116,8 +116,9 @@ export function WorkbenchPage() {
     if (saveFirst && !(await saveVersion())) return;
     setBlockingOperation(true);
     try {
-      const result = await apiRequest<{ files: string[] }>(`/api/jobs/${jobId}/export`, "POST", { filename: draft?.document.personal_info.name ? `${draft.document.personal_info.name}-简历` : "影子简历", formats: ["docx", "pdf"] });
-      notify(`已导出：${result.files.join("；")}`, "success");
+      const result = await apiRequest<{ files: string[]; word_mode: "source_format" | "generated_template" }>(`/api/jobs/${jobId}/export`, "POST", { filename: draft?.document.personal_info.name ? `${draft.document.personal_info.name}-简历` : "影子简历", formats: ["docx", "pdf"] });
+      const mode = result.word_mode === "source_format" ? "Word 已保留原文件排版；" : "";
+      notify(`${mode}已导出：${result.files.join("；")}`, "success");
     } catch (error) { notify(error instanceof Error ? error.message : "导出失败", "error"); }
     finally { setBlockingOperation(false); }
   }
@@ -134,8 +135,9 @@ export function WorkbenchPage() {
     notify("版本名称和备注已更新", "success");
   }
   async function exportVersion(version: ResumeVersion) {
-    const result = await apiRequest<{ files: string[] }>(`/api/versions/${version.id}/export`, "POST", { filename: version.name, formats: ["docx", "pdf"] });
-    notify(`历史版本已导出：${result.files.join("；")}`, "success");
+    const result = await apiRequest<{ files: string[]; word_mode: "source_format" | "generated_template" }>(`/api/versions/${version.id}/export`, "POST", { filename: version.name, formats: ["docx", "pdf"] });
+    const mode = result.word_mode === "source_format" ? "Word 已保留原文件排版；" : "";
+    notify(`${mode}历史版本已导出：${result.files.join("；")}`, "success");
   }
   async function proposeEdit() {
     if (!selectedParagraph) { notify("请先在画布中选择一个段落", "error"); return; }

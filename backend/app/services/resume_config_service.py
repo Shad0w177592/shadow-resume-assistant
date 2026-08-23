@@ -9,30 +9,30 @@ from app.persistence.database import Database, utc_now
 
 DEFAULT_SECTIONS = [
     {"section_key": "summary", "title": "自我介绍", "enabled": True, "order": 0, "column": "right"},
-    {"section_key": "skills", "title": "专业技能", "enabled": True, "order": 1, "column": "left"},
-    {"section_key": "project", "title": "项目经历", "enabled": True, "order": 2, "column": "right"},
-    {"section_key": "work", "title": "工作经历", "enabled": True, "order": 3, "column": "right"},
-    {
-        "section_key": "internship",
-        "title": "实习经历",
-        "enabled": True,
-        "order": 4,
-        "column": "right",
-    },
     {
         "section_key": "education",
         "title": "教育经历",
         "enabled": True,
-        "order": 5,
+        "order": 1,
         "column": "left",
     },
+    {"section_key": "work", "title": "工作经历", "enabled": True, "order": 2, "column": "right"},
+    {
+        "section_key": "internship",
+        "title": "实习经历",
+        "enabled": True,
+        "order": 3,
+        "column": "right",
+    },
+    {"section_key": "project", "title": "项目经历", "enabled": True, "order": 4, "column": "right"},
     {
         "section_key": "campus",
         "title": "校园、社团及志愿经历",
         "enabled": False,
-        "order": 6,
+        "order": 5,
         "column": "left",
     },
+    {"section_key": "skills", "title": "专业技能", "enabled": True, "order": 6, "column": "left"},
     {
         "section_key": "awards",
         "title": "证书与奖项",
@@ -92,6 +92,25 @@ class ResumeConfigService:
     @staticmethod
     def _with_defaults(config: dict[str, Any]) -> dict[str, Any]:
         normalized = deepcopy(config)
+        sections = normalized.get("sections", [])
+        legacy_order = [
+            "summary",
+            "skills",
+            "project",
+            "work",
+            "internship",
+            "education",
+            "campus",
+            "awards",
+            "other",
+        ]
+        current_order = [
+            item["section_key"] for item in sorted(sections, key=lambda item: item["order"])
+        ]
+        if current_order == legacy_order:
+            new_order = {item["section_key"]: item["order"] for item in DEFAULT_SECTIONS}
+            for section in sections:
+                section["order"] = new_order[section["section_key"]]
         for section in normalized.get("sections", []):
             section.setdefault("max_entries", None)
         return normalized
