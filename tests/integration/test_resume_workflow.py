@@ -461,6 +461,23 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
     monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI", raising=False)
     tailor_calls = []
+    original_summary = (
+        "作为经济学专业应届生，四年的学习让我习惯从数据中找规律、用逻辑解释现象，"
+        "因此具备较强的数据敏感度和结构化拆解能力，也养成了用数据验证想法的习惯。"
+        "在过往实习和社团经历中，锻炼了良好的沟通协调与多任务推进能力，能快速融入新环境并与团队配合。"
+        "对内容创作和用户洞察有一定体感，能独立完成短视频选题、拍摄与剪辑，也熟悉内容平台基本逻辑。"
+        "尤其擅长将 Codex、DeepSeek 等 AI 工具融入日常工作和学习，用于信息搜集、文案撰写、"
+        "数据整理和思路梳理。我自驱力强，对基础工作保持耐心，愿意持续学习岗位所需知识。"
+    )
+    tailored_summary = (
+        "经济学专业应届生，四年学习形成从数据中识别规律、用逻辑解释业务现象的习惯，"
+        "具备数据敏感度、结构化拆解和信息核验意识。运营实习中持续复盘主播招募数据，"
+        "通过渠道台账和沟通记录优化跟进方式，可迁移至商品期货产业链数据维护、日常更新与异常追踪。"
+        "自媒体经历覆盖选题、脚本、拍摄、剪辑和发布，能够将分散资讯整理为结构清晰的日报周报。"
+        "社团活动中积累跨对象协调和多任务推进经验，可支持调研访谈、市场信息核实与研究协同。"
+        "熟悉 Excel、Codex 和 DeepSeek 等工具，可用于数据整理、资料检索、内容复盘和研究提纲撰写，"
+        "希望在真实业务中持续补充产业链知识并形成可复查的研究输出。"
+    )
 
     def complete_json(self, **request):
         if request["workflow"] == "job_parse":
@@ -480,7 +497,7 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
                 "summary": "我学习能力强，我认真负责，我能够胜任岗位。",
                 "skills": [
                     {
-                        "heading": "数据搜集与结构化整理",
+                        "heading": "黑色系的数据研究能力",
                         "text": "可基于现有习惯整理数据。",
                         "reason": "岗位需要数据",
                     },
@@ -492,14 +509,10 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
                 ],
             }
         return {
-            "summary": (
-                "经济学本科背景，具备主播招募数据复盘、内容运营分析与跨对象跟进经验；"
-                "可将信息筛选、结构化记录和异常沟通能力迁移至商品期货产业链数据维护、"
-                "日报周报更新及调研协同，为研究判断提供持续、可核验的信息支持。"
-            ),
+            "summary": tailored_summary,
             "skills": [
                 {
-                    "heading": "产业链数据库维护与研究简报",
+                    "heading": "Excel 数据整理",
                     "text": (
                         "使用表格化字段、来源标记和交叉核验方法持续更新产业链数据库，"
                         "整理日度市场变化与周度跟踪结论，形成可复查的研究简报。"
@@ -517,7 +530,7 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
         client.put(
             "/api/profile",
             headers=HEADERS,
-            json={"personal_info": {"name": "候选人", "summary": "原自我介绍"}},
+            json={"personal_info": {"name": "候选人", "summary": original_summary}},
         )
         client.post(
             "/api/profile/entries",
@@ -560,7 +573,8 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
     )
     issues = tailor_calls[1]["payload"]["quality_issues"]
     assert any("空泛评价" in issue for issue in issues)
-    assert any("过于泛化" in issue for issue in issues)
+    assert any("行业包装" in issue for issue in issues)
+    assert any("短于原文篇幅目标" in issue for issue in issues)
     sections = {
         section["section_key"]: section
         for section in generated.json()["document"]["sections"]
@@ -568,4 +582,8 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
     summary = sections["summary"]["blocks"][0]["paragraphs"][0]["text"]
     assert "产业链数据维护" in summary
     assert "能够胜任" not in summary
-    assert sections["skills"]["blocks"][0]["heading"] == "产业链数据库维护与研究简报"
+    target = tailor_calls[0]["payload"]["summary_style_target"]
+    assert target["character_min"] <= len(original_summary.replace(" ", ""))
+    assert len(summary.replace(" ", "")) >= target["character_min"]
+    assert "黑色系数据研究能力" in tailor_calls[0]["instructions"]
+    assert sections["skills"]["blocks"][0]["heading"] == "Excel 数据整理"

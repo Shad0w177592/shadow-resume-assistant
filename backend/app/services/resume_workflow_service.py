@@ -244,6 +244,7 @@ class ResumeWorkflowService:
         rewrite_sections = set(config.get("rewrite_sections") or [])
         if not rewrite_sections.intersection({"summary", "skills"}):
             return []
+        summary_style_target = self._summary_style_target(original_summary)
         tailor_payload = {
             "target_job": {
                 "company": job.get("company"),
@@ -254,6 +255,7 @@ class ResumeWorkflowService:
             "modify_summary": "summary" in rewrite_sections,
             "modify_skills": "skills" in rewrite_sections,
             "original_summary": original_summary,
+            "summary_style_target": summary_style_target,
             "evidence": [
                 {
                     "section_key": entry["section_key"],
@@ -266,11 +268,17 @@ class ResumeWorkflowService:
         instructions = (
             "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
             "先依据完整 JD 识别目标岗位的核心任务、交付物、工具和能力，再结合候选人证据写作。"
-            "自我介绍写成 80 至 160 个中文字符的职业摘要：直接点明目标岗位，使用 2 项具体经历证据，"
+            "自我介绍必须保持原文的篇幅和信息密度，严格按 payload.summary_style_target 的字符范围"
+            "与句数目标写作；原文较长时不得压缩成两句话。直接点明目标岗位，"
+            "使用至少 2 项具体经历证据，"
             "说明可迁移能力怎样用于岗位任务；尽量无主语，禁止反复使用‘我/本人’，禁止‘能够胜任、"
             "快速适应、学习能力强、认真负责’等空话，不照抄 JD。"
-            "专业技能补充 1 至 2 条：标题必须是 JD 对应的具体专业能力，正文必须写清工具或方法、"
-            "要完成的岗位任务及可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
+            "专业技能补充 1 至 2 条：标题必须是候选人可核实的具体工具或可迁移能力，"
+            "简洁到 4 至 14 个字符，"
+            "例如‘Excel 数据整理’‘SQL 数据查询’‘市场数据分析’；"
+            "目标行业、品种、公司和岗位名称只能写在"
+            "正文用途里，禁止写成‘黑色系数据研究能力’这类行业包装标题。正文写清工具或方法、岗位任务及"
+            "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
         )
@@ -280,10 +288,12 @@ class ResumeWorkflowService:
             payload=tailor_payload,
             schema=RESUME_TAILOR_SCHEMA,
         )
-        quality_issues = self._tailor_quality_issues(result, rewrite_sections)
+        quality_issues = self._tailor_quality_issues(
+            result, rewrite_sections, summary_style_target
+        )
         if quality_issues:
             try:
-                result = self.provider.complete_json(
+                retry_result = self.provider.complete_json(
                     workflow="resume_tailor_profile",
                     instructions=(
                         instructions
@@ -296,6 +306,11 @@ class ResumeWorkflowService:
                     },
                     schema=RESUME_TAILOR_SCHEMA,
                 )
+                retry_issues = self._tailor_quality_issues(
+                    retry_result, rewrite_sections, summary_style_target
+                )
+                if len(retry_issues) <= len(quality_issues):
+                    result = retry_result
             except AIProviderError:
                 pass
         warnings: list[str] = []
@@ -371,14 +386,38 @@ class ResumeWorkflowService:
         return warnings
 
     @staticmethod
-    def _tailor_quality_issues(result: dict[str, Any], rewrite_sections: set[str]) -> list[str]:
+    def _summary_style_target(original_summary: str) -> dict[str, int]:
+        compact = re.sub(r"\s+", "", original_summary)
+        length = len(compact)
+        if length >= 80:
+            minimum = max(80, round(length * 0.85))
+            maximum = max(minimum + 20, round(length * 1.15))
+        else:
+            minimum, maximum = 90, 160
+        sentence_count = len(re.findall(r"[。！？]", original_summary))
+        return {
+            "character_min": minimum,
+            "character_max": maximum,
+            "sentence_target": max(3, sentence_count),
+        }
+
+    @staticmethod
+    def _tailor_quality_issues(
+        result: dict[str, Any],
+        rewrite_sections: set[str],
+        summary_style_target: dict[str, int],
+    ) -> list[str]:
         issues = []
         if "summary" in rewrite_sections:
             summary = str(result.get("summary") or "").strip()
-            if len(summary) < 70:
-                issues.append("自我介绍过短，缺少具体经历证据和岗位用途")
-            if len(summary) > 220:
-                issues.append("自我介绍过长，不利于招聘者快速阅读")
+            compact_length = len(re.sub(r"\s+", "", summary))
+            if compact_length < summary_style_target["character_min"]:
+                issues.append("自我介绍短于原文篇幅目标，不能压缩成两句话")
+            if compact_length > summary_style_target["character_max"]:
+                issues.append("自我介绍长于原文篇幅目标，需要保持原文密度")
+            sentence_count = len(re.findall(r"[。！？]", summary))
+            if sentence_count < max(2, summary_style_target["sentence_target"] - 1):
+                issues.append("自我介绍句数明显少于原文，应保留相近的信息层次")
             if summary.count("我") > 2:
                 issues.append("自我介绍第一人称过多，应改为简洁职业摘要")
             banned = ("能够胜任", "快速适应", "学习能力强", "认真负责")
@@ -398,11 +437,14 @@ class ResumeWorkflowService:
                 heading = str(skill.get("heading") or "").strip()
                 text = str(skill.get("text") or "").strip()
                 if heading in generic_headings:
-                    issues.append(f"技能标题“{heading}”过于泛化，需改为 JD 对应的专业能力")
+                    issues.append(f"技能标题“{heading}”过于泛化，需改为具体工具或能力")
+                if len(re.sub(r"\s+", "", heading)) > 14:
+                    issues.append(f"技能标题“{heading}”过长，应改为简洁的工具或能力名称")
+                if re.search(r"黑色系|白色系|有色系|商品期货|金融行业|目标岗位", heading):
+                    issues.append(f"技能标题“{heading}”含行业包装，应只保留具体工具或能力")
                 if len(text) < 30 or text.startswith(("可基于", "能够持续")):
                     issues.append(f"技能“{heading or '未命名'}”缺少方法、岗位任务或交付物")
         return issues
-
     def _requirements(self, job_id: str) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
@@ -490,10 +532,18 @@ class ResumeWorkflowService:
             return re.sub(r"\s+", "", str(value or "")).lower()
 
         title = normalize(entry.get("title"))
-        content = normalize(payload.get("content"))
+        raw_content = str(payload.get("content") or "")
+        content = normalize(raw_content)
+        lines = [line.strip() for line in raw_content.splitlines() if line.strip()]
+        section_key = str(entry.get("section_key") or "")
+        if content and len(lines) >= 2:
+            return (section_key, "imported_multiline", content)
+        if content and section_key == "skills" and re.search(r"[：:]", raw_content):
+            skill_name = normalize(re.split(r"[：:]", raw_content, maxsplit=1)[0])
+            return (section_key, skill_name, content)
         if content:
-            return (str(entry.get("section_key") or ""), "content", content)
-        return (str(entry.get("section_key") or ""), "title", title) if title else None
+            return (section_key, title, content)
+        return (section_key, "title", title) if title else None
 
     @staticmethod
     def _merge_duplicate_entries(
