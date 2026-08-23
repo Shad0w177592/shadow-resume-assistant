@@ -453,3 +453,119 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
         assert sent_source_ids == [skill["id"]]
         assert first_work["id"] not in sent_source_ids
         assert second_work["id"] not in sent_source_ids
+
+
+def test_tailoring_retries_generic_content_with_full_jd_context(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "resume-workflow")
+    monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI", raising=False)
+    tailor_calls = []
+
+    def complete_json(self, **request):
+        if request["workflow"] == "job_parse":
+            return {
+                "requirements": [
+                    {
+                        "requirement_type": "responsibility",
+                        "summary": "维护产业链数据库并更新日报周报",
+                        "source_text": "搜集更新产业链数据，维护数据库，更新日报、周报",
+                    }
+                ]
+            }
+        assert request["workflow"] == "resume_tailor_profile"
+        tailor_calls.append(request)
+        if len(tailor_calls) == 1:
+            return {
+                "summary": "我学习能力强，我认真负责，我能够胜任岗位。",
+                "skills": [
+                    {
+                        "heading": "数据搜集与结构化整理",
+                        "text": "可基于现有习惯整理数据。",
+                        "reason": "岗位需要数据",
+                    },
+                    {
+                        "heading": "沟通跟进与协同推进",
+                        "text": "能够持续沟通并推进任务。",
+                        "reason": "岗位需要协作",
+                    },
+                ],
+            }
+        return {
+            "summary": (
+                "经济学本科背景，具备主播招募数据复盘、内容运营分析与跨对象跟进经验；"
+                "可将信息筛选、结构化记录和异常沟通能力迁移至商品期货产业链数据维护、"
+                "日报周报更新及调研协同，为研究判断提供持续、可核验的信息支持。"
+            ),
+            "skills": [
+                {
+                    "heading": "产业链数据库维护与研究简报",
+                    "text": (
+                        "使用表格化字段、来源标记和交叉核验方法持续更新产业链数据库，"
+                        "整理日度市场变化与周度跟踪结论，形成可复查的研究简报。"
+                    ),
+                    "reason": "对应数据库维护与日报周报职责",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "tailor-quality", credentials)
+    with TestClient(app) as client:
+        client.put(
+            "/api/profile",
+            headers=HEADERS,
+            json={"personal_info": {"name": "候选人", "summary": "原自我介绍"}},
+        )
+        client.post(
+            "/api/profile/entries",
+            headers=HEADERS,
+            json={
+                "section_key": "work",
+                "title": "内容运营",
+                "payload": {"content": "负责主播招募、数据复盘与问题协调"},
+            },
+        )
+        jd_text = (
+            "搜集更新产业链数据，维护数据库，更新日报、周报，并参与市场分析和调研。"
+        )
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": jd_text, "title": "商品期货研究员", "company": "目标机构"},
+        ).json()
+        assert (
+            client.post(f"/api/jobs/{job['id']}/analyze", headers=HEADERS).status_code
+            == 200
+        )
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        config["rewrite_sections"] = ["summary", "skills"]
+        saved = client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
+        assert saved.status_code == 200, saved.text
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+
+    assert len(tailor_calls) == 2
+    assert tailor_calls[0]["payload"]["target_job"]["jd_text"] == jd_text
+    assert tailor_calls[0]["payload"]["requirements"][0]["source_text"].startswith(
+        "搜集更新"
+    )
+    issues = tailor_calls[1]["payload"]["quality_issues"]
+    assert any("空泛评价" in issue for issue in issues)
+    assert any("过于泛化" in issue for issue in issues)
+    sections = {
+        section["section_key"]: section
+        for section in generated.json()["document"]["sections"]
+    }
+    summary = sections["summary"]["blocks"][0]["paragraphs"][0]["text"]
+    assert "产业链数据维护" in summary
+    assert "能够胜任" not in summary
+    assert sections["skills"]["blocks"][0]["heading"] == "产业链数据库维护与研究简报"

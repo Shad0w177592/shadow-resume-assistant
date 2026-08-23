@@ -91,6 +91,7 @@ class ResumeWorkflowService:
                     document,
                     selected,
                     requirements,
+                    job,
                     config,
                     str(profile["personal_info"].get("summary") or ""),
                 )
@@ -235,6 +236,7 @@ class ResumeWorkflowService:
         document: ResumeDocument,
         entries: list[dict[str, Any]],
         requirements: list[dict[str, Any]],
+        job: dict[str, Any],
         config: dict[str, Any],
         original_summary: str,
     ) -> list[str]:
@@ -242,32 +244,60 @@ class ResumeWorkflowService:
         rewrite_sections = set(config.get("rewrite_sections") or [])
         if not rewrite_sections.intersection({"summary", "skills"}):
             return []
+        tailor_payload = {
+            "target_job": {
+                "company": job.get("company"),
+                "title": job.get("title"),
+                "jd_text": job.get("jd_text"),
+            },
+            "requirements": requirements,
+            "modify_summary": "summary" in rewrite_sections,
+            "modify_skills": "skills" in rewrite_sections,
+            "original_summary": original_summary,
+            "evidence": [
+                {
+                    "section_key": entry["section_key"],
+                    "title": entry["title"],
+                    "payload": redact_payload_for_ai(entry["payload"]),
+                }
+                for entry in entries
+            ],
+        }
+        instructions = (
+            "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
+            "先依据完整 JD 识别目标岗位的核心任务、交付物、工具和能力，再结合候选人证据写作。"
+            "自我介绍写成 80 至 160 个中文字符的职业摘要：直接点明目标岗位，使用 2 项具体经历证据，"
+            "说明可迁移能力怎样用于岗位任务；尽量无主语，禁止反复使用‘我/本人’，禁止‘能够胜任、"
+            "快速适应、学习能力强、认真负责’等空话，不照抄 JD。"
+            "专业技能补充 1 至 2 条：标题必须是 JD 对应的具体专业能力，正文必须写清工具或方法、"
+            "要完成的岗位任务及可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
+            "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
+            "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
+        )
         result = self.provider.complete_json(
             workflow="resume_tailor_profile",
-            instructions=(
-                "你是中文求职简历编辑器。根据岗位要求和候选人的真实经历完成两个任务。"
-                "自我介绍必须使用真实经历中的可迁移能力，说明这些能力如何胜任目标岗位；"
-                "不得编造公司、学校、岗位、日期、数字或成果。"
-                "专业技能可以按用户授权补充 1 至 2 条目标岗位能力，即使资料中没有直接写出；"
-                "这类补充会在生成后明确提示用户核实。技能描述要具体、可编辑，不要虚构任职经历。"
-                "只处理 payload 中标记为 true 的栏目。"
-            ),
-            payload={
-                "requirements": requirements,
-                "modify_summary": "summary" in rewrite_sections,
-                "modify_skills": "skills" in rewrite_sections,
-                "original_summary": original_summary,
-                "evidence": [
-                    {
-                        "section_key": entry["section_key"],
-                        "title": entry["title"],
-                        "payload": redact_payload_for_ai(entry["payload"]),
-                    }
-                    for entry in entries
-                ],
-            },
+            instructions=instructions,
+            payload=tailor_payload,
             schema=RESUME_TAILOR_SCHEMA,
         )
+        quality_issues = self._tailor_quality_issues(result, rewrite_sections)
+        if quality_issues:
+            try:
+                result = self.provider.complete_json(
+                    workflow="resume_tailor_profile",
+                    instructions=(
+                        instructions
+                        + "上一次草稿存在下列质量问题。保留真实证据，逐项修正后返回完整新结果。"
+                    ),
+                    payload={
+                        **tailor_payload,
+                        "previous_result": result,
+                        "quality_issues": quality_issues,
+                    },
+                    schema=RESUME_TAILOR_SCHEMA,
+                )
+            except AIProviderError:
+                pass
         warnings: list[str] = []
         if "summary" in rewrite_sections:
             summary = result["summary"].strip()
@@ -340,10 +370,45 @@ class ResumeWorkflowService:
             )
         return warnings
 
+    @staticmethod
+    def _tailor_quality_issues(result: dict[str, Any], rewrite_sections: set[str]) -> list[str]:
+        issues = []
+        if "summary" in rewrite_sections:
+            summary = str(result.get("summary") or "").strip()
+            if len(summary) < 70:
+                issues.append("自我介绍过短，缺少具体经历证据和岗位用途")
+            if len(summary) > 220:
+                issues.append("自我介绍过长，不利于招聘者快速阅读")
+            if summary.count("我") > 2:
+                issues.append("自我介绍第一人称过多，应改为简洁职业摘要")
+            banned = ("能够胜任", "快速适应", "学习能力强", "认真负责")
+            if any(value in summary for value in banned):
+                issues.append("自我介绍包含空泛评价，应改为证据和岗位任务")
+        if "skills" in rewrite_sections:
+            generic_headings = {
+                "沟通能力",
+                "团队协作",
+                "执行力",
+                "抗压能力",
+                "学习能力",
+                "数据搜集与结构化整理",
+                "沟通跟进与协同推进",
+            }
+            for skill in result.get("skills") or []:
+                heading = str(skill.get("heading") or "").strip()
+                text = str(skill.get("text") or "").strip()
+                if heading in generic_headings:
+                    issues.append(f"技能标题“{heading}”过于泛化，需改为 JD 对应的专业能力")
+                if len(text) < 30 or text.startswith(("可基于", "能够持续")):
+                    issues.append(f"技能“{heading or '未命名'}”缺少方法、岗位任务或交付物")
+        return issues
+
     def _requirements(self, job_id: str) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT id, summary FROM job_requirement WHERE job_target_id=?", (job_id,)
+                "SELECT id, requirement_type, summary, source_text "
+                "FROM job_requirement WHERE job_target_id=?",
+                (job_id,),
             ).fetchall()
         return [dict(row) for row in rows]
 
