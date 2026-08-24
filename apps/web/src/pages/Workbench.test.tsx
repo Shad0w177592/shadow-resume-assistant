@@ -21,6 +21,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const profile = { id: "profile", display_name: "", personal_info: {}, entries: [{ id: "entry-1", section_key: "project", title: "影子项目", payload: { content: "完成工作流" }, importance: 5, created_at: "", updated_at: "" }] };
   const draft = { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", section_key: "project", title: "项目经历", order: 0, column: "right", blocks: [{ block_id: "block-1", heading: "影子项目", meta: "", paragraphs: [{ paragraph_id: "p-1", text: "完成工作流", source_entry_ids: ["entry-1"] }] }] }, { section_id: "section-summary", section_key: "summary", title: "自我介绍", order: 1, column: "full", blocks: [{ block_id: "block-summary", heading: "", meta: "", paragraphs: [{ paragraph_id: "p-summary", text: "原来的自我介绍", source_entry_ids: [] }] }] }] } };
   const savedVersion = { id: "version-1", name: "版本 1", notes: null, created_at: "2026-08-22T12:00:00Z", snapshot: { document: draft.document, config } };
+  let exportAttempts = 0;
   const request = vi.fn(async (path: string, method = "GET", body?: unknown) => {
     if (path.endsWith("/resume-config") && method === "GET") return { config };
     if (path === "/api/profile") return profile;
@@ -29,11 +30,16 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     if (path.endsWith("/resume-config") && method === "PUT") return body;
     if (path.endsWith("/generate")) return { ...draft, fact_warnings: ["AI 为目标岗位补充了专业技能：AI 信息收集，请在使用前核实"] };
     if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
+    if (path.endsWith("/edit-proposals/pending")) return [];
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/draft") && method === "PUT") return { ...draft, ...(body as object) };
     if (path.endsWith("/versions") && method === "POST") return savedVersion;
-    if (path.endsWith("/export") && method === "POST") return { files: ["杨丰铭-简历.docx", "杨丰铭-简历.pdf"], word_mode: "source_format" };
+    if (path === "/api/jobs/job-1/export" && method === "POST") {
+      exportAttempts += 1;
+      if (exportAttempts === 1) throw new Error("存在未接受或拒绝的 AI 修改建议");
+      return { files: ["杨丰铭-简历.docx", "杨丰铭-简历.pdf"], word_mode: "source_format" };
+    }
     if (path === "/api/versions/version-1/compare" && method === "POST") return { changes: [{ block_id: "p-1", change: "modified" }] };
     if (path === "/api/versions/version-1/restore" && method === "POST") return draft;
     if (path === "/api/versions/version-1" && method === "PATCH") return { ...savedVersion, ...(body as object) };
@@ -51,6 +57,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(await screen.findByText("栏目与取舍")).toBeInTheDocument();
   expect(document.querySelector(".workbench-toolbar-actions")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "生成修改" })).toBeInTheDocument();
+  expect(request).toHaveBeenCalledWith("/api/jobs/job-1/edit-proposals/pending", "GET", undefined);
   expect(screen.getByRole("button", { name: "生成简历" }).closest(".primary-actions")).toBeInTheDocument();
   const workbench = screen.getByLabelText("简历工作台");
   await user.click(screen.getByRole("button", { name: "收起栏目与取舍" }));
@@ -108,6 +115,10 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/draft", "PUT", expect.any(Object)));
   await user.click(screen.getByRole("button", { name: "保存版本" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/versions", "POST", { name: "版本 1", notes: null }));
+  await user.click(screen.getByRole("button", { name: "导出" }));
+  expect(await screen.findByText("导出前需要处理 AI 修改")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "查看并处理" }));
+  expect(screen.queryByText("导出前需要处理 AI 修改")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "导出" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/export", "POST", expect.objectContaining({ formats: ["docx", "pdf"] })));
   expect(await screen.findByText(/Word 已保留原文件排版/)).toBeInTheDocument();

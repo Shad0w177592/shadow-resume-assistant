@@ -79,6 +79,11 @@ class EditProposalService:
         }
         with self.database.connect() as connection:
             connection.execute(
+                "UPDATE edit_proposal SET status='rejected', updated_at=? "
+                "WHERE draft_id=? AND status='pending'",
+                (now, draft["id"]),
+            )
+            connection.execute(
                 "INSERT INTO edit_proposal(id, draft_id, target_block_id, before_text, "
                 "after_text, status, payload_json, schema_version, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, 'pending', ?, 1, ?, ?)",
@@ -94,6 +99,18 @@ class EditProposalService:
                 ),
             )
         return self.get(proposal_id)
+
+    def list_pending(self, job_id: str) -> list[dict[str, Any]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT p.id FROM edit_proposal p "
+                "JOIN resume_draft d ON d.id=p.draft_id "
+                "WHERE d.job_target_id=? AND p.status='pending' "
+                "ORDER BY p.created_at DESC",
+                (job_id,),
+            ).fetchall()
+        return [self.get(row["id"]) for row in rows]
+
 
     def get(self, proposal_id: str) -> dict[str, Any]:
         with self.database.connect() as connection:

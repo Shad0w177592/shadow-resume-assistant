@@ -144,3 +144,50 @@ def test_reject_fabrication_block_and_optional_profile_update(
         profile = client.get("/api/profile", headers=HEADERS).json()["entries"]
         updated = next(entry for entry in profile if entry["id"] == entries[0]["id"])
         assert updated["payload"]["content"] == second["after_text"]
+
+
+def test_pending_proposal_survives_reload_and_new_proposal_supersedes_old_one(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "edit-session")
+    app = create_app(tmp_path / "pending-data", InMemoryCredentialStore())
+    with TestClient(app) as client:
+        draft, _entries = prepare(client)
+        target = draft["document"]["sections"][0]["blocks"][0]["paragraphs"][0][
+            "paragraph_id"
+        ]
+        first = client.post(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals",
+            headers=HEADERS,
+            json={"target_paragraph_id": target, "instruction": "写得更简洁"},
+        ).json()
+        loaded = client.get(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals/pending",
+            headers=HEADERS,
+        ).json()
+        assert [item["id"] for item in loaded] == [first["id"]]
+
+        second = client.post(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals",
+            headers=HEADERS,
+            json={"target_paragraph_id": target, "instruction": "表达更专业"},
+        ).json()
+        loaded = client.get(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals/pending",
+            headers=HEADERS,
+        ).json()
+        assert [item["id"] for item in loaded] == [second["id"]]
+        with app.state.services.database.connect() as connection:
+            first_status = connection.execute(
+                "SELECT status FROM edit_proposal WHERE id=?", (first["id"],)
+            ).fetchone()[0]
+        assert first_status == "rejected"
+
+        accepted = client.post(
+            f"/api/edit-proposals/{second['id']}/accept", headers=HEADERS
+        )
+        assert accepted.status_code == 200
+        assert client.get(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals/pending",
+            headers=HEADERS,
+        ).json() == []

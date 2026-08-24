@@ -321,6 +321,13 @@ def get_task(task_id: str, app: Annotated[AppServices, Depends(services)]) -> di
     return result
 
 
+@router.get("/jobs/{job_id}/edit-proposals/pending")
+def list_pending_edit_proposals(
+    job_id: str, app: Annotated[AppServices, Depends(services)]
+) -> list[dict[str, Any]]:
+    return EditProposalService(app.database).list_pending(job_id)
+
+
 @router.post("/jobs/{job_id}/edit-proposals", status_code=201)
 def create_edit_proposal(
     job_id: str,
