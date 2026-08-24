@@ -1,6 +1,6 @@
 {
   "name": "shadow-resume-assistant",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "影子简历助手 - 本地优先的 AI 简历生成与修改工具",
   "packageManager": "pnpm@11.19.0",
@@ -13,7 +13,7 @@
     "test:e2e": "pnpm --filter @shadow/web test:e2e",
     "build": "pnpm -r build && .venv\\Scripts\\python.exe -m PyInstaller backend/shadow_backend.spec --noconfirm",
     "package:win": "pnpm build && pnpm --filter @shadow/desktop package:win",
-    "verify:package": "pwsh -NoProfile -File tests/windows/verify_package.ps1 -Installer \"output/installers/影子简历助手 Setup 0.2.4.exe\"",
+    "verify:package": "pwsh -NoProfile -File tests/windows/verify_package.ps1 -Installer \"output/installers/影子简历助手 Setup 0.2.5.exe\"",
     "generate:api": ".venv\\Scripts\\python.exe scripts/export_openapi.py",
     "generate:fixtures": ".venv\\Scripts\\python.exe tests/fixtures/generate_documents.py",
     "test:all": "pnpm lint && pnpm test && pnpm test:integration && pnpm test:e2e && pnpm -r build"
