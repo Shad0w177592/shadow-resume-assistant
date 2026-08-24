@@ -269,3 +269,30 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     assert provider.request["payload"]["skill_count_target"] == 3
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
     assert "严格遵守 payload.skill_count_target" in provider.request["instructions"]
+
+
+def test_explicit_section_count_is_not_reduced_by_page_budget() -> None:
+    config = {
+        "template": "single_column",
+        "page_target": 1,
+        "rewrite_sections": ["work"],
+        "sections": [
+            {"section_key": "work", "max_entries": 3},
+        ],
+    }
+    entries = [
+        {
+            "id": str(index),
+            "section_key": "work",
+            "title": f"工作经历 {index}",
+            "payload": {"content": "职责与成果" * 180},
+            "selection_mode": "ai_decide",
+        }
+        for index in range(3)
+    ]
+    warnings: list[str] = []
+
+    result = ResumeWorkflowService._fit_budget(config, entries, warnings)
+
+    assert len(result) == 3
+    assert not any("页数预算省略" in warning for warning in warnings)

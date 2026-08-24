@@ -741,6 +741,12 @@ class ResumeWorkflowService:
         maximum = limits[(config["template"], config["page_target"])]
         result = list(entries)
         rewrite_sections = set(config.get("rewrite_sections") or [])
+        requested_counts = {
+            section["section_key"]: section.get("max_entries") for section in config["sections"]
+        }
+        section_counts: defaultdict[str, int] = defaultdict(int)
+        for entry in result:
+            section_counts[entry["section_key"]] += 1
 
         def size() -> int:
             return sum(len(json.dumps(item["payload"], ensure_ascii=False)) for item in result)
@@ -752,12 +758,18 @@ class ResumeWorkflowService:
                     for item in reversed(result)
                     if item["selection_mode"] != "must_include"
                     and item["section_key"] in rewrite_sections
+                    and (
+                        requested_counts.get(item["section_key"]) is None
+                        or section_counts[item["section_key"]]
+                        > requested_counts[item["section_key"]]
+                    )
                 ),
                 None,
             )
             if removable is None:
                 break
             result.remove(removable)
+            section_counts[removable["section_key"]] -= 1
             warnings.append(f"因页数预算省略：{removable['title'] or '未命名记录'}")
         return result
 
