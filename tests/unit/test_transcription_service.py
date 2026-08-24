@@ -49,6 +49,7 @@ def test_transcription_uses_configured_gateway(monkeypatch, tmp_path: Path) -> N
         def get_setting(_key, _default):
             return {
                 "base_url": "https://gateway.example.com/v1",
+                "transcription_base_url": "https://speech.example.com/v1",
                 "transcription_model": "whisper-1",
             }
 
@@ -57,7 +58,7 @@ def test_transcription_uses_configured_gateway(monkeypatch, tmp_path: Path) -> N
     credentials.set("sk-test-key")
     service = TranscriptionService(credentials, tmp_path, Database())
     assert service.transcribe(b"voice")
-    assert FakeOpenAI.options["base_url"] == "https://gateway.example.com/v1"
+    assert FakeOpenAI.options["base_url"] == "https://speech.example.com/v1"
     assert FakeOpenAI.request["model"] == "whisper-1"
     assert FakeOpenAI.request["language"] == "zh"
 
@@ -90,7 +91,9 @@ def test_custom_gateway_falls_back_to_whisper_after_503(
     monkeypatch.setattr("app.services.transcription_service.OpenAI", GatewayOpenAI)
     credentials = InMemoryCredentialStore()
     credentials.set("sk-test-key")
-    result = TranscriptionService(credentials, tmp_path, Database()).transcribe(b"voice")
+    result = TranscriptionService(credentials, tmp_path, Database()).transcribe(
+        b"voice"
+    )
     assert result == "语音已经正确转成文字"
     assert requested_models == ["gpt-transcribe", "whisper-1"]
 

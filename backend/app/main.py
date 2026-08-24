@@ -11,7 +11,11 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel
 
-from app.security.credentials import CredentialStore, WindowsCredentialStore
+from app.security.credentials import (
+    VOICE_TARGET,
+    CredentialStore,
+    WindowsCredentialStore,
+)
 from app.services.bootstrap import bootstrap_services
 
 
@@ -32,12 +36,16 @@ def session_guard(
 def create_app(
     data_root: Path | None = None,
     credential_store: CredentialStore | None = None,
+    voice_credential_store: CredentialStore | None = None,
 ) -> FastAPI:
     store = credential_store or WindowsCredentialStore()
+    voice_store = voice_credential_store or (
+        store if credential_store is not None else WindowsCredentialStore(VOICE_TARGET)
+    )
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
-        app_instance.state.services = bootstrap_services(data_root, store)
+        app_instance.state.services = bootstrap_services(data_root, store, voice_store)
         yield
 
     app = FastAPI(

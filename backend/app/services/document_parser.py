@@ -116,9 +116,7 @@ class DocumentParser:
                     kind = "list_item" if item.style and "List" in item.style.name else "paragraph"
                     if item.style and item.style.name.startswith("Heading"):
                         kind = "heading"
-                    blocks.append(
-                        ParsedBlock(block_id=block_id, kind=kind, text=text, order=order)
-                    )
+                    blocks.append(ParsedBlock(block_id=block_id, kind=kind, text=text, order=order))
                 elif isinstance(item, Table):
                     rows = [[cell.text.strip() for cell in row.cells] for row in item.rows]
                     text = "\n".join(" | ".join(row) for row in rows).strip()

@@ -58,9 +58,11 @@ def test_onboarding_and_api_key_are_separated_from_sqlite(
 ) -> None:
     monkeypatch.setenv("SHADOW_SESSION_TOKEN", "session")
     credentials = InMemoryCredentialStore()
-    app = create_app(tmp_path / "app-data", credentials)
+    voice_credentials = InMemoryCredentialStore()
+    app = create_app(tmp_path / "app-data", credentials, voice_credentials)
     headers = {"x-shadow-session": "session"}
     secret = "sk-test-secret-value"
+    voice_secret = "voice-gateway-secret"
     with TestClient(app) as client:
         initial = client.get("/api/bootstrap", headers=headers)
         assert initial.json()["initialized"] is False
@@ -72,11 +74,19 @@ def test_onboarding_and_api_key_are_separated_from_sqlite(
         configured = client.put(
             "/api/credentials/openai", headers=headers, json={"api_key": secret}
         )
+        voice_configured = client.put(
+            "/api/credentials/transcription",
+            headers=headers,
+            json={"api_key": voice_secret},
+        )
     assert updated.json()["privacy_accepted"] is True
     assert configured.json() == {"configured": True}
     assert credentials.get() == secret
+    assert voice_configured.json() == {"configured": True}
+    assert voice_credentials.get() == voice_secret
     database_bytes = app.state.services.paths.database.read_bytes()
     assert secret.encode() not in database_bytes
+    assert voice_secret.encode() not in database_bytes
 
 
 def test_invalid_api_key_does_not_replace_existing_key(
@@ -134,6 +144,7 @@ def test_custom_base_url_is_normalized_persisted_and_validated(
                 "model": "gateway-model",
                 "api_mode": "chat_completions",
                 "base_url": "https://gateway.example.com/openai/v1///",
+                "transcription_base_url": "https://speech.example.com/v1///",
                 "transcription_model": "whisper-1",
                 "voice_device_id": None,
             },
@@ -142,6 +153,7 @@ def test_custom_base_url_is_normalized_persisted_and_validated(
         assert saved.json()["base_url"] == "https://gateway.example.com/openai/v1"
         assert saved.json()["api_mode"] == "chat_completions"
         assert saved.json()["transcription_model"] == "whisper-1"
+        assert saved.json()["transcription_base_url"] == "https://speech.example.com/v1"
         assert client.get("/api/settings", headers=headers).json()["base_url"] == (
             "https://gateway.example.com/openai/v1"
         )

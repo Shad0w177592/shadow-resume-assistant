@@ -20,6 +20,7 @@ class BootstrapState(BaseModel):
     initialized: bool
     onboarding_step: int
     api_key_configured: bool
+    transcription_api_key_configured: bool
     data_directory: str
 
 
@@ -34,10 +35,11 @@ class SettingsUpdate(BaseModel):
     model: str = "gpt-5-mini"
     api_mode: Literal["responses", "chat_completions"] = "responses"
     base_url: str = ""
+    transcription_base_url: str = ""
     transcription_model: str = Field(default="gpt-transcribe", min_length=1, max_length=120)
     voice_device_id: str | None = None
 
-    @field_validator("base_url")
+    @field_validator("base_url", "transcription_base_url")
     @classmethod
     def validate_base_url(cls, value: str) -> str:
         value = value.strip()
@@ -72,6 +74,7 @@ def get_bootstrap(app: Annotated[AppServices, Depends(services)]) -> BootstrapSt
         initialized=bool(app.database.get_setting("initialized", False)),
         onboarding_step=int(app.database.get_setting("onboarding_step", 0)),
         api_key_configured=app.credentials.get() is not None,
+        transcription_api_key_configured=app.voice_credentials.get() is not None,
         data_directory=str(app.paths.root),
     )
 
@@ -95,6 +98,7 @@ def get_settings(app: Annotated[AppServices, Depends(services)]) -> dict[str, An
             "model": "gpt-5-mini",
             "api_mode": "responses",
             "base_url": "",
+            "transcription_base_url": "",
             "transcription_model": "gpt-transcribe",
             "voice_device_id": None,
         },
@@ -150,4 +154,21 @@ def put_openai_key(
 @router.delete("/credentials/openai")
 def delete_openai_key(app: Annotated[AppServices, Depends(services)]) -> dict[str, bool]:
     app.credentials.delete()
+    return {"configured": False}
+
+
+@router.put("/credentials/transcription")
+def put_transcription_key(
+    payload: ApiKeyInput,
+    app: Annotated[AppServices, Depends(services)],
+) -> dict[str, bool]:
+    app.voice_credentials.set(payload.api_key)
+    return {"configured": True}
+
+
+@router.delete("/credentials/transcription")
+def delete_transcription_key(
+    app: Annotated[AppServices, Depends(services)],
+) -> dict[str, bool]:
+    app.voice_credentials.delete()
     return {"configured": False}

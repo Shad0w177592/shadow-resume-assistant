@@ -380,7 +380,10 @@ async def transcribe_audio(
         raise HTTPException(status_code=422, detail="录音为空或超过 15MB")
     suffix = ".webm" if "webm" in (audio.content_type or "") else ".wav"
     try:
-        text = TranscriptionService(app.credentials, app.paths.temp, app.database).transcribe(
+        voice_credentials = (
+            app.voice_credentials if app.voice_credentials.get() else app.credentials
+        )
+        text = TranscriptionService(voice_credentials, app.paths.temp, app.database).transcribe(
             content, suffix
         )
     except ValueError as error:
@@ -510,6 +513,7 @@ def clear_data(
     result = BackupService(app.database, app.paths).clear_all(payload.include_api_key)
     if payload.include_api_key:
         app.credentials.delete()
+        app.voice_credentials.delete()
     return result
 
 

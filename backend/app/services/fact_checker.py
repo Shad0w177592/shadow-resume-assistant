@@ -26,9 +26,21 @@ CHINESE_DIGITS = {
 CHINESE_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
 
 PROTECTED_TERMS = {
-    "星云科技", "产品实习生", "高级产品经理", "OpenAI API", "Python", "Java",
-    "Kubernetes", "某某大学", "清华大学", "信息管理与信息系统", "计算机专业",
-    "国家级一等奖", "校级优秀结项", "英语母语水平", "商业智能问答公司",
+    "星云科技",
+    "产品实习生",
+    "高级产品经理",
+    "OpenAI API",
+    "Python",
+    "Java",
+    "Kubernetes",
+    "某某大学",
+    "清华大学",
+    "信息管理与信息系统",
+    "计算机专业",
+    "国家级一等奖",
+    "校级优秀结项",
+    "英语母语水平",
+    "商业智能问答公司",
 }
 
 
@@ -100,4 +112,3 @@ def check_hard_facts(source_texts: list[str], generated: str) -> FactCheckResult
         if term in generated and term not in source:
             violations.append(f"unsupported_term:{term}")
     return FactCheckResult(allowed=not violations, violations=tuple(sorted(set(violations))))
-

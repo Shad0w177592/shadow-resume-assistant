@@ -42,9 +42,7 @@ class Database:
                 "CREATE TABLE IF NOT EXISTS schema_migration "
                 "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
             )
-            applied = {
-                row[0] for row in connection.execute("SELECT version FROM schema_migration")
-            }
+            applied = {row[0] for row in connection.execute("SELECT version FROM schema_migration")}
             for migration in sorted(self.migrations_dir.glob("[0-9][0-9][0-9]_*.sql")):
                 version = int(migration.name.split("_", 1)[0])
                 if version in applied:

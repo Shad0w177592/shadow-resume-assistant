@@ -111,7 +111,6 @@ class EditProposalService:
             ).fetchall()
         return [self.get(row["id"]) for row in rows]
 
-
     def get(self, proposal_id: str) -> dict[str, Any]:
         with self.database.connect() as connection:
             row = connection.execute(

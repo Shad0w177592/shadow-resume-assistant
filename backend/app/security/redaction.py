@@ -14,9 +14,7 @@ def redact_text(value: str) -> str:
     for pattern in SECRET_PATTERNS:
         result = pattern.sub(
             lambda match: (
-                "[REDACTED]"
-                if match.lastindex is None
-                else f"{match.group(1)}[REDACTED]"
+                "[REDACTED]" if match.lastindex is None else f"{match.group(1)}[REDACTED]"
             ),
             result,
         )

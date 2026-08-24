@@ -276,8 +276,7 @@ class JobAnalysisService:
         for sequence in re.findall(r"[\u4e00-\u9fff]{2,}", text):
             for length in range(2, min(4, len(sequence)) + 1):
                 chinese_tokens.update(
-                    sequence[index : index + length]
-                    for index in range(len(sequence) - length + 1)
+                    sequence[index : index + length] for index in range(len(sequence) - length + 1)
                 )
         return {
             token

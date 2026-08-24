@@ -35,4 +35,3 @@ class ParsedDocument(BaseModel):
     pages: list[ParsedPage]
     status: ParseStatus
     failure_reason: str | None = None
-

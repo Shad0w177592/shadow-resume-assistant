@@ -300,9 +300,7 @@ class ResumeWorkflowService:
             payload=tailor_payload,
             schema=RESUME_TAILOR_SCHEMA,
         )
-        quality_issues = self._tailor_quality_issues(
-            result, rewrite_sections, summary_style_target
-        )
+        quality_issues = self._tailor_quality_issues(result, rewrite_sections, summary_style_target)
         if quality_issues:
             try:
                 retry_result = self.provider.complete_json(
@@ -422,9 +420,7 @@ class ResumeWorkflowService:
                 raise AIProviderError(
                     "invalid_output", "AI 返回的岗位专业技能与原内容重复，未保存本次结果"
                 )
-            skills_section.blocks = self._deduplicate_skill_blocks(
-                added_blocks + remaining_blocks
-            )
+            skills_section.blocks = self._deduplicate_skill_blocks(added_blocks + remaining_blocks)
             warnings.append(
                 f"AI 为目标岗位补充了专业技能：{'、'.join(added_headings)}。"
                 "这些是 AI 根据岗位要求起草的内容，请确认自己确实掌握后再投递"
@@ -540,7 +536,6 @@ class ResumeWorkflowService:
             )
             target.meta = ""
         return result
-
 
     @staticmethod
     def _skill_topic(heading: str, text: str) -> str:
@@ -668,8 +663,7 @@ class ResumeWorkflowService:
         merged["payload"] = dict(canonical.get("payload") or {})
         merged["selection_mode"] = (
             "must_include"
-            if "must_include"
-            in {current.get("selection_mode"), candidate.get("selection_mode")}
+            if "must_include" in {current.get("selection_mode"), candidate.get("selection_mode")}
             else canonical.get("selection_mode", "ai_decide")
         )
         merged["importance"] = max(

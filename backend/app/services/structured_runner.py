@@ -46,4 +46,3 @@ async def run_structured(
         except (json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
     raise StructuredOutputError(f"structured output failed: {type(last_error).__name__}")
-

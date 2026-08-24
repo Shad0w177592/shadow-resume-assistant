@@ -69,6 +69,5 @@ def word_to_pdf(
         detail = (completed.stderr or completed.stdout or "").strip()
         suffix = f"：{detail[-300:]}" if detail else ""
         raise RuntimeError(
-            "无法通过 Microsoft Word 生成同版 PDF，请确认电脑已安装并可正常打开 Word"
-            + suffix
+            "无法通过 Microsoft Word 生成同版 PDF，请确认电脑已安装并可正常打开 Word" + suffix
         )

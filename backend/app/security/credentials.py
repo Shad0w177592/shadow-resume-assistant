@@ -6,6 +6,7 @@ from ctypes import wintypes
 from typing import Protocol
 
 TARGET = "ShadowResumeAssistant/OpenAI"
+VOICE_TARGET = "ShadowResumeAssistant/OpenAI/Transcription"
 
 
 class CredentialStore(Protocol):
@@ -58,9 +59,7 @@ class WindowsCredentialStore:
 
     def get(self) -> str | None:
         pointer = ctypes.POINTER(CREDENTIALW)()
-        ok = self.advapi32.CredReadW(
-            self.target, self.CRED_TYPE_GENERIC, 0, ctypes.byref(pointer)
-        )
+        ok = self.advapi32.CredReadW(self.target, self.CRED_TYPE_GENERIC, 0, ctypes.byref(pointer))
         if not ok:
             if ctypes.get_last_error() == self.ERROR_NOT_FOUND:
                 return None

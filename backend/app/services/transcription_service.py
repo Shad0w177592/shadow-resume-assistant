@@ -29,7 +29,7 @@ class TranscriptionService:
     def transcribe(self, audio: bytes, suffix: str = ".webm") -> str:
         api_key = self.credentials.get()
         if not api_key:
-            raise ValueError("请先在设置中配置 OpenAI API Key")
+            raise ValueError("请先在设置中配置语音 API Key，或配置可复用的文本 API Key")
         path = self.temp_dir / f"voice-{uuid4()}{suffix}"
         path.write_bytes(audio)
         try:
@@ -37,12 +37,12 @@ class TranscriptionService:
             settings = {}
             if self.database:
                 settings = self.database.get_setting("ai_settings", {})
-                base_url = str(settings.get("base_url") or "").strip()
+                base_url = str(
+                    settings.get("transcription_base_url") or settings.get("base_url") or ""
+                ).strip()
                 if base_url:
                     client_options["base_url"] = base_url
-            configured_model = str(
-                settings.get("transcription_model") or "gpt-transcribe"
-            ).strip()
+            configured_model = str(settings.get("transcription_model") or "gpt-transcribe").strip()
             models = [configured_model]
             if client_options.get("base_url") and configured_model == "gpt-transcribe":
                 models.append("whisper-1")
@@ -87,8 +87,6 @@ class TranscriptionService:
         except (APITimeoutError, APIConnectionError) as error:
             raise RuntimeError("无法连接语音转写服务，请检查网络和 Base URL") from error
         except APIStatusError as error:
-            raise RuntimeError(
-                f"语音转写服务返回错误（HTTP {error.status_code}）"
-            ) from error
+            raise RuntimeError(f"语音转写服务返回错误（HTTP {error.status_code}）") from error
         finally:
             path.unlink(missing_ok=True)
