@@ -269,6 +269,12 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     assert len(skills.blocks) == 3
     assert provider.request["payload"]["skill_count_target"] == 3
     assert "统计范围、周期、前后变化" in provider.request["instructions"]
+    assert "两页简历应让第一页填满、第二页超过半页" in provider.request["instructions"]
+    assert provider.request["payload"]["page_layout_target"] == {
+        "page_target": 1,
+        "minimum_total_fill_ratio": 0.8,
+        "rule": "一页内容至少覆盖页面可用区域的 80%",
+    }
     assert document.greeting_message.startswith("Boss您好")
     assert "BOSS 直聘首次沟通" in provider.request["instructions"]
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
@@ -301,6 +307,26 @@ def test_explicit_section_count_is_not_reduced_by_page_budget() -> None:
     assert len(result) == 3
     assert not any("页数预算省略" in warning for warning in warnings)
 
+
+def test_layout_fill_thresholds_follow_selected_page_count() -> None:
+    class Document:
+        def __init__(self, length: int) -> None:
+            self.length = length
+
+        def plain_text(self) -> str:
+            return "字" * self.length
+
+    one_result = ResumeWorkflowService._layout(
+        {"template": "single_column", "page_target": 1}, Document(1399)
+    )
+    two_result = ResumeWorkflowService._layout(
+        {"template": "technical_double_column", "page_target": 2}, Document(2324)
+    )
+
+    assert one_result["status"] == "underfilled"
+    assert one_result["minimum"] == 1400
+    assert two_result["status"] == "underfilled"
+    assert two_result["minimum"] == 2325
 
 def test_greeting_message_quality_checks_structure_and_limit() -> None:
     valid = {

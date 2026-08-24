@@ -89,6 +89,8 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(projectLimit.closest(".section-limit")).toBeInTheDocument();
   await user.selectOptions(projectLimit, "2");
   await user.selectOptions(screen.getByLabelText("模板"), "technical_double_column");
+  expect(screen.getByRole("option", { name: "一页（至少 80%）" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "两页（第二页过半）" })).toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("页数"), "2");
   const projectCard = screen.getByText("项目经历").closest("article");
   const skillsCard = screen.getByText("专业技能").closest("article");

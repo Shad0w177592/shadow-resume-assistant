@@ -460,6 +460,12 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
         )
         assert len(requests) == 1
         assert "2 至 4 条可扫读要点" in requests[0]["instructions"]
+        assert "一页简历的内容应覆盖页面至少 80%" in requests[0]["instructions"]
+        assert requests[0]["payload"]["page_layout_target"] == {
+            "page_target": 1,
+            "minimum_total_fill_ratio": 0.8,
+            "rule": "一页内容至少覆盖页面可用区域的 80%",
+        }
         sent_source_ids = [
             source_id
             for paragraph in requests[0]["payload"]["paragraphs"]

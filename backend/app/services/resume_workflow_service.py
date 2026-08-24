@@ -48,8 +48,12 @@ RESUME_WRITING_METHOD = (
     "日期、工具、数字或业绩。删除赋能、助力、沉淀、显著提升等无法单独证明价值的套话。"
     "经历栏目负责展示事实与成果，不要在每条末尾生硬追加‘可用于目标岗位’；"
     "能力如何迁移到目标岗位，应集中在自我介绍和打招呼语中说明。"
-    "同一技能只出现一次，技能标题写具体工具或可交付能力；整体以一页优先、层级清楚、"
-    "关键词易扫读为目标，不靠缩小字号和堆满文字制造丰富感。"
+    "同一技能只出现一次，技能标题写具体工具或可交付能力。页数以用户在工作台选择的一页或两页为准；"
+    "导入 Word 时默认尊重原文件页数和版式，但用户主动选择页数时以用户选择为准。"
+    "一页简历的内容应覆盖页面至少 80%；两页简历应让第一页填满、第二页超过半页，"
+    "即两页总内容至少覆盖可用版面的 75%。内容不足时优先调整字号、字间距、行间距和段落间距，"
+    "再在真实资料范围内补充有价值的信息，不得靠虚构事实、过度缩小字号或堆砌空话强行填满。"
+    "始终保持层级清楚、关键词易扫读和整体美观。"
 )
 
 class ResumeWorkflowService:
@@ -241,6 +245,7 @@ class ResumeWorkflowService:
             payload={
                 "requirements": requirements,
                 "strategies": config["strategies"],
+                "page_layout_target": self._page_layout_target(config),
                 "paragraphs": paragraphs,
             },
             schema=RESUME_REWRITE_SCHEMA,
@@ -279,6 +284,7 @@ class ResumeWorkflowService:
             "original_summary": original_summary,
             "summary_style_target": summary_style_target,
             "skill_count_target": skill_count_target,
+            "page_layout_target": self._page_layout_target(config),
             "generate_greeting_message": True,
             "candidate_name": document.personal_info.name,
             "evidence": [
@@ -960,10 +966,10 @@ class ResumeWorkflowService:
     def _layout(config: dict[str, Any], document: ResumeDocument) -> dict[str, Any]:
         text_length = len(document.plain_text())
         bounds = {
-            ("single_column", 1): (1300, 1750),
-            ("single_column", 2): (2500, 3400),
-            ("technical_double_column", 1): (1200, 1600),
-            ("technical_double_column", 2): (2250, 3100),
+            ("single_column", 1): (1400, 1750),
+            ("single_column", 2): (2550, 3400),
+            ("technical_double_column", 1): (1280, 1600),
+            ("technical_double_column", 2): (2325, 3100),
         }
         minimum, maximum = bounds[(config["template"], config["page_target"])]
         status = "fit"
@@ -976,6 +982,21 @@ class ResumeWorkflowService:
             "character_count": text_length,
             "minimum": minimum,
             "maximum": maximum,
+        }
+
+    @staticmethod
+    def _page_layout_target(config: dict[str, Any]) -> dict[str, Any]:
+        page_target = config["page_target"]
+        if page_target == 1:
+            return {
+                "page_target": 1,
+                "minimum_total_fill_ratio": 0.8,
+                "rule": "一页内容至少覆盖页面可用区域的 80%",
+            }
+        return {
+            "page_target": 2,
+            "minimum_total_fill_ratio": 0.75,
+            "rule": "第一页填满，第二页内容超过半页",
         }
 
     def _save_task(
