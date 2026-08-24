@@ -421,3 +421,18 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
   overflow-y: hidden;
   white-space: pre-wrap;
 }
+/* Spacious workbench section controls */
+.workbench-left .panel-content > article.section-option {
+  display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 13px;
+  padding: 15px 14px; margin: 10px 0; background: rgba(255, 250, 244, .88); border: 1px solid #d8c5b3; border-radius: 8px;
+  box-shadow: 0 2px 0 rgba(45, 36, 31, .08); transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.workbench-left .panel-content > article.section-option:hover { background: #fffaf3; border-color: var(--ink); transform: translateY(-1px); }
+.workbench-left .section-option .check { min-width: 0; white-space: normal; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.workbench-left .section-option .check input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--rose); }
+.workbench-left .section-option .section-limit {
+  display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px;
+  margin: 0; padding: 9px 10px; white-space: nowrap; background: #f4e8dc; border: 1px solid #e2d1c1; border-radius: 6px;
+}
+.workbench-left .section-option .section-limit span { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.workbench-left .section-option .section-limit select { width: 92px; min-width: 92px; height: 38px; padding: 0 10px; text-align: center; background: #fffdf9; font-weight: 700; }

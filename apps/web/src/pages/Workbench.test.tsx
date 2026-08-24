@@ -84,9 +84,9 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await user.click(screen.getByRole("button", { name: "展开 AI 修改助手" }));
   expect(workbench).not.toHaveClass("right-panel-collapsed");
   const projectLimit = screen.getByLabelText("项目经历最多使用");
-  expect(projectLimit).toHaveAttribute("placeholder", "不限");
+  expect(projectLimit).toHaveValue("");
   expect(projectLimit.closest(".section-limit")).toBeInTheDocument();
-  await user.type(projectLimit, "2");
+  await user.selectOptions(projectLimit, "2");
   await user.selectOptions(screen.getByLabelText("模板"), "technical_double_column");
   await user.selectOptions(screen.getByLabelText("页数"), "2");
   const projectCard = screen.getByText("项目经历").closest("article");
