@@ -326,6 +326,11 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
                         "heading": "AI Agent 项目交付",
                         "text": "能够使用 Codex 完成 AI 项目从0到1搭建。",
                         "reason": "岗位要求 AI 工具与项目落地能力",
+                    },
+                    {
+                        "heading": "AI 信息搜集",
+                        "text": "使用 ChatGPT 和 DeepSeek 搜集资料、归纳要点并整理岗位研究材料。",
+                        "reason": "岗位需要 AI 信息处理能力",
                     }
                 ],
             }
@@ -420,6 +425,9 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
             block["paragraphs"][0]["text"] for block in sections["work"]["blocks"]
         ] == ["保持原文一", "保持原文二"]
         assert sections["skills"]["blocks"][0]["heading"] == "AI Agent 项目交付"
+        assert "AI 信息搜集" not in [
+            block["heading"] for block in sections["skills"]["blocks"]
+        ]
         added_skill = sections["skills"]["blocks"][0]["paragraphs"][0]
         assert added_skill["source_entry_ids"] == []
         assert "ai_added_skill" in added_skill["risk_flags"]
@@ -582,4 +590,6 @@ def test_tailoring_retries_generic_content_with_full_jd_context(
     assert target["character_min"] <= len(original_summary.replace(" ", ""))
     assert len(summary.replace(" ", "")) >= target["character_min"]
     assert "黑色系数据研究能力" in tailor_calls[0]["instructions"]
+    assert "语义重叠" in tailor_calls[0]["instructions"]
+    assert "Excel、SQL" in tailor_calls[0]["instructions"]
     assert sections["skills"]["blocks"][0]["heading"] == "Excel 数据整理"

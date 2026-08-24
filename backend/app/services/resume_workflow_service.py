@@ -278,11 +278,15 @@ class ResumeWorkflowService:
             "使用至少 2 项具体经历证据，"
             "说明可迁移能力怎样用于岗位任务；尽量无主语，禁止反复使用‘我/本人’，禁止‘能够胜任、"
             "快速适应、学习能力强、认真负责’等空话，不照抄 JD。"
-            "专业技能补充 1 至 2 条：标题必须是候选人可核实的具体工具或可迁移能力，"
+            "专业技能补充 1 至 2 条：标题必须是候选人可核实的具体工具或可迁移能力。"
+            "技能之间必须是不同能力，不得同时返回 AI 信息搜集与 AI 工具应用等语义重叠项；"
+            "应合并为一条 AI 工具应用，再优先从证据中选择 Office/PPT/Excel、文档写作、"
+            "视频剪辑等另一项不同能力。"
             "简洁到 4 至 14 个字符，"
             "例如‘Excel 数据整理’‘SQL 数据查询’‘市场数据分析’；"
             "目标行业、品种、公司和岗位名称只能写在"
-            "正文用途里，禁止写成‘黑色系数据研究能力’这类行业包装标题。正文写清工具或方法、岗位任务及"
+            "正文用途里，禁止写成黑色系数据研究能力这类行业包装标题。数据类技能必须明确写出"
+            "候选人使用的 Excel、SQL、Python、Power BI、Tableau、SPSS 等具体工具；正文写清工具或方法、岗位任务及"
             "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
@@ -359,11 +363,17 @@ class ResumeWorkflowService:
             }
             added_blocks = []
             added_headings = []
+            added_topics: set[str] = set()
             for item in additions:
                 heading = item["heading"].strip()
                 text = item["text"].strip()
+                topic = self._skill_topic(heading, text)
+                if topic and topic in added_topics:
+                    continue
                 if not heading or not text or f"{heading}\n{text}" in existing:
                     continue
+                if topic:
+                    added_topics.add(topic)
                 added_headings.append(heading)
                 added_blocks.append(
                     ResumeBlock(
@@ -438,18 +448,46 @@ class ResumeWorkflowService:
                 "数据搜集与结构化整理",
                 "沟通跟进与协同推进",
             }
+            seen_topics: dict[str, str] = {}
             for skill in result.get("skills") or []:
                 heading = str(skill.get("heading") or "").strip()
                 text = str(skill.get("text") or "").strip()
+                topic = ResumeWorkflowService._skill_topic(heading, text)
+                if topic and topic in seen_topics:
+                    issues.append(
+                        f"技能 {heading} 与 {seen_topics[topic]} 语义重复，应合并后改选另一项不同能力"
+                    )
+                elif topic:
+                    seen_topics[topic] = heading
                 if heading in generic_headings:
                     issues.append(f"技能标题“{heading}”过于泛化，需改为具体工具或能力")
                 if len(re.sub(r"\s+", "", heading)) > 14:
                     issues.append(f"技能标题“{heading}”过长，应改为简洁的工具或能力名称")
                 if re.search(r"黑色系|白色系|有色系|商品期货|金融行业|目标岗位", heading):
                     issues.append(f"技能标题“{heading}”含行业包装，应只保留具体工具或能力")
+                if "数据" in heading and not re.search(
+                    r"Excel|SQL|Python|Power\s*BI|Tableau|SPSS|R语言",
+                    f"{heading} {text}",
+                    re.IGNORECASE,
+                ):
+                    issues.append(f"数据类技能 {heading} 没有写明 Excel、SQL 等具体工具")
                 if len(text) < 30 or text.startswith(("可基于", "能够持续")):
                     issues.append(f"技能“{heading or '未命名'}”缺少方法、岗位任务或交付物")
         return issues
+
+    @staticmethod
+    def _skill_topic(heading: str, text: str) -> str:
+        value = f"{heading} {text}".lower()
+        if re.search(r"\bai\b|chatgpt|deepseek|codex|大模型|人工智能", value):
+            return "ai_tools"
+        if re.search(r"excel|sql|python|power\s*bi|tableau|spss|数据", value):
+            return "data"
+        if re.search(r"ppt|powerpoint|word|office|文档|报告", value):
+            return "office_documents"
+        if re.search(r"剪辑|pr\b|premiere|达芬奇|final\s*cut|视频", value):
+            return "video_editing"
+        return ""
+
     def _requirements(self, job_id: str) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
