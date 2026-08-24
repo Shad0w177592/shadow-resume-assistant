@@ -23,13 +23,18 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const draft = { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", section_key: "project", title: "项目经历", order: 0, column: "right", blocks: [{ block_id: "block-1", heading: "影子项目", meta: "完成工作流", paragraphs: [{ paragraph_id: "p-1", text: "完成工作流", source_entry_ids: ["entry-1"] }] }] }, { section_id: "section-summary", section_key: "summary", title: "自我介绍", order: 1, column: "full", blocks: [{ block_id: "block-summary", heading: "", meta: "", paragraphs: [{ paragraph_id: "p-summary", text: "原来的自我介绍", source_entry_ids: [] }] }] }] } };
   const savedVersion = { id: "version-1", name: "版本 1", notes: null, created_at: "2026-08-22T12:00:00Z", snapshot: { document: draft.document, config } };
   let exportAttempts = 0;
+  let generationAttempts = 0;
   const request = vi.fn(async (path: string, method = "GET", body?: unknown) => {
     if (path.endsWith("/resume-config") && method === "GET") return { config };
     if (path === "/api/profile") return profile;
     if (path.endsWith("/draft") && method === "GET") throw new Error("no draft");
     if (path.endsWith("/versions") && method === "GET") return [];
     if (path.endsWith("/resume-config") && method === "PUT") return body;
-    if (path.endsWith("/generate")) return { ...draft, fact_warnings: ["AI 为目标岗位补充了专业技能：AI 信息收集，请在使用前核实"] };
+    if (path.endsWith("/generate")) {
+      generationAttempts += 1;
+      if (generationAttempts === 1) throw new Error("Error invoking remote method 'backend:request': Error: 无法连接 AI 服务，请检查网络和 Base URL 后重试");
+      return { ...draft, fact_warnings: ["AI 为目标岗位补充了专业技能：AI 信息收集，请在使用前核实"] };
+    }
     if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
     if (path.endsWith("/edit-proposals/pending")) return [];
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
@@ -90,6 +95,14 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await user.click(screen.getByRole("button", { name: "生成简历" }));
   expect(await screen.findByText("选择需要 AI 修改的栏目")).toBeInTheDocument();
   expect(screen.getByText(/未勾选栏目会保留原有文字和条目顺序/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "按所选栏目生成" }));
+  const generationAlert = (await screen.findByText("上次生成失败")).closest('[role="alert"]');
+  expect(generationAlert).toHaveTextContent("无法连接 AI 服务，请检查网络和 Base URL 后重试");
+  expect(generationAlert).not.toHaveTextContent("Error invoking remote method");
+  expect(screen.getByRole("button", { name: "按所选栏目生成" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "关闭" }));
+  await user.click(screen.getByRole("button", { name: "生成简历" }));
+  expect(screen.getByText("上次生成失败")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "按所选栏目生成" }));
   const projectEditor = await screen.findByDisplayValue("完成工作流");
   expect(projectEditor).toHaveClass("expanded");

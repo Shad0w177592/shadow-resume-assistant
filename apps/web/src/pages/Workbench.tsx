@@ -15,6 +15,13 @@ function normalizeResumeText(value: string) {
   return value.toLowerCase().replace(/[^0-9a-z\u4e00-\u9fff]+/g, "");
 }
 
+function userFacingError(error: unknown, fallback: string) {
+  const raw = error instanceof Error ? error.message : fallback;
+  return raw
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim() || fallback;
+}
 function shouldShowBlockMeta(meta: string, paragraphTexts: string[]) {
   const normalizedMeta = normalizeResumeText(meta);
   if (!normalizedMeta) return false;
@@ -62,6 +69,7 @@ export function WorkbenchPage() {
   const [instruction, setInstruction] = useState("");
   const [saveScope, setSaveScope] = useState("current_resume");
   const [showGenerateOptions, setShowGenerateOptions] = useState(false);
+  const [generationError, setGenerationError] = useState("");
   const [showPolish, setShowPolish] = useState(false);
   const [polishMethods, setPolishMethods] = useState<string[]>([]);
   const [showFabricationRisk, setShowFabricationRisk] = useState(false);
@@ -138,6 +146,7 @@ export function WorkbenchPage() {
   async function runGenerate() {
     if (!config) return;
     setBusy(true);
+    setGenerationError("");
     try {
       await saveConfig();
       const value = await apiRequest<GeneratedResumeDraft>(`/api/jobs/${jobId}/generate`, "POST");
@@ -145,10 +154,13 @@ export function WorkbenchPage() {
       setFactWarnings(value.fact_warnings || []);
       setShowGenerateOptions(false);
       undoStack.current = []; redoStack.current = [];
-    } catch (error) { notify(error instanceof Error ? error.message : "生成失败", "error"); }
+    } catch (error) {
+      const message = userFacingError(error, "生成失败");
+      setGenerationError(message);
+      notify(message, "error");
+    }
     finally { setBusy(false); }
   }
-
   function editParagraph(paragraphId: string, text: string) {
     if (!draft) return;
     undoStack.current.push(structuredClone(draft)); redoStack.current = [];
@@ -274,7 +286,7 @@ export function WorkbenchPage() {
       <section className="workbench-canvas">{!draft ? <Card><EmptyState title="尚未生成草稿" description="完成左侧配置后生成简历。" /></Card> : <article className={`resume-preview ${config.template}`}><header><h1>{draft.document.personal_info.name || "姓名"}</h1><p>{draft.document.personal_info.contacts.join(" · ")}</p></header>{draft.document.sections.map((section) => <section className={`resume-section ${section.column || "full"}`} key={section.section_id}><h2>{section.title}</h2>{section.blocks.map((block) => <div key={block.block_id}><strong>{block.heading}</strong>{shouldShowBlockMeta(block.meta, block.paragraphs.map((paragraph) => paragraph.text)) && <small>{block.meta}</small>}{block.paragraphs.map((paragraph) => <ResumeParagraphEditor key={paragraph.paragraph_id} label={`编辑${block.heading || section.title}`} text={paragraph.text} expanded={paragraphsExpanded} selected={selectedParagraph === paragraph.paragraph_id} onFocus={() => setSelectedParagraph(paragraph.paragraph_id)} onChange={(value) => editParagraph(paragraph.paragraph_id, value)} />)}</div>)}</section>)}</article>}</section>
       <aside className="workbench-right"><div className="panel-heading"><h2>{showVersions ? "历史版本" : "AI 修改助手"}</h2><button type="button" className="panel-toggle" aria-label={rightPanelCollapsed ? "展开 AI 修改助手" : "收起 AI 修改助手"} onClick={() => setRightPanelCollapsed((value) => !value)}>{rightPanelCollapsed ? "展开" : "收起"}</button></div><div className="panel-content">{showVersions ? <div className="version-list">{versions.length === 0 ? <p>还没有主动保存的版本。</p> : versions.map((version) => <article key={version.id}><strong>{version.name}</strong><small>{new Date(version.created_at).toLocaleString()}</small>{version.notes && <p>{version.notes}</p>}<div className="actions"><Button className="ghost" onClick={() => editVersionMeta(version)}>改名/备注</Button><Button className="ghost" onClick={() => compareVersion(version)}>对比</Button><Button className="ghost" onClick={() => setRestoreTarget(version)}>恢复</Button><Button className="ghost" onClick={() => exportVersion(version)}>导出</Button><Button className="danger" onClick={() => deleteVersion(version)}>删除</Button></div></article>)}{comparison && <p>对比结果：{comparison.length ? `${comparison.length} 个内容块发生变化` : "没有变化"}</p>}</div> : <>{selectedParagraph ? <p className="selection-ready">已选择一个段落</p> : <p>先在画布中选择一段内容。</p>}<label className="field"><span>修改要求</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="例如：写得更简洁，降低夸张程度" /></label><div className="actions"><Button className="secondary" onClick={recording ? stopRecording : startRecording}>{recording ? "停止录音" : "语音输入"}</Button><Button onClick={proposeEdit}>生成修改</Button></div><label className="field"><span>接受后保存到</span><select value={saveScope} onChange={(event) => setSaveScope(event.target.value)}><option value="current_resume">只用于当前简历</option><option value="also_profile">同时保存到个人资料库</option></select></label>{proposal && <Card title="修改前后对比"><div className="proposal-before"><small>修改前</small><p>{proposal.before_text}</p></div><div className="proposal-after"><small>修改后</small><p>{proposal.after_text}</p></div><p><strong>理由：</strong>{proposal.payload.reason}</p><p><strong>证据：</strong>{proposal.payload.evidence_ids.join("、")}</p>{proposal.status === "pending" ? <div className="actions"><Button onClick={() => decide("accept")}>接受</Button><Button className="danger" onClick={() => decide("reject")}>拒绝</Button><Button className="ghost" onClick={proposeEdit}>重新生成</Button></div> : <p className="save-state">已{proposal.status === "accepted" ? "接受" : "拒绝"}</p>}</Card>}</>}</div></aside>
       <Dialog open={pendingExportBlocked} title="导出前需要处理 AI 修改" onClose={() => setPendingExportBlocked(false)}><p>发现尚未接受或拒绝的 AI 修改。对应的修改前后对比已经显示在右侧，请先选择“接受”或“拒绝”，再重新导出。</p><div className="actions"><Button onClick={() => { setPendingExportBlocked(false); setShowVersions(false); setRightPanelCollapsed(false); }}>查看并处理</Button><Button className="ghost" onClick={() => setPendingExportBlocked(false)}>取消导出</Button></div></Dialog>
-      <Dialog open={showGenerateOptions} title="选择需要 AI 修改的栏目" onClose={() => setShowGenerateOptions(false)}><p>只勾选希望 AI 润色或重新排序的栏目。未勾选栏目会保留原有文字和条目顺序。</p><div className="polish-options">{ordered.filter((section) => section.enabled).map((section) => <label key={section.section_key}><input type="checkbox" checked={config.rewrite_sections.includes(section.section_key)} onChange={() => toggleRewriteSection(section.section_key)} />{section.title}<small>{config.rewrite_sections.includes(section.section_key) ? "AI 可以改写内容，并按岗位相关性调整本栏目条目顺序。" : "保持原有内容和条目顺序。"}</small></label>)}</div><div className="actions"><Button disabled={busy} onClick={runGenerate}>{busy ? "生成中…" : "按所选栏目生成"}</Button><Button className="ghost" disabled={busy} onClick={() => setShowGenerateOptions(false)}>取消</Button></div></Dialog>
+      <Dialog open={showGenerateOptions} title="选择需要 AI 修改的栏目" onClose={() => setShowGenerateOptions(false)}><p>只勾选希望 AI 润色或重新排序的栏目。未勾选栏目会保留原有文字和条目顺序。</p>{generationError && <div className="generation-error" role="alert"><strong>上次生成失败</strong><p>{generationError}</p><small>个人资料、当前草稿和历史版本均未丢失。修正网络或 AI 服务配置后可直接重试。</small></div>}<div className="polish-options">{ordered.filter((section) => section.enabled).map((section) => <label key={section.section_key}><input type="checkbox" checked={config.rewrite_sections.includes(section.section_key)} onChange={() => toggleRewriteSection(section.section_key)} />{section.title}<small>{config.rewrite_sections.includes(section.section_key) ? "AI 可以改写内容，并按岗位相关性调整本栏目条目顺序。" : "保持原有内容和条目顺序。"}</small></label>)}</div><div className="actions"><Button disabled={busy} onClick={runGenerate}>{busy ? "生成中…" : "按所选栏目生成"}</Button><Button className="ghost" disabled={busy} onClick={() => setShowGenerateOptions(false)}>取消</Button></div></Dialog>
       <Dialog open={factWarnings.length > 0} title="简历已生成，请核实 AI 补充内容" onClose={() => setFactWarnings([])}><p>整份简历已经生成并保存。以下内容没有在你的个人资料或原文中找到直接依据，可能是 AI 为了润色而补充的：</p><ul>{factWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p>你可以先保留这份简历，再直接修改相关内容；关闭或取消本提醒不会删除生成结果。</p><div className="actions"><Button onClick={() => setFactWarnings([])}>知道了，保留简历</Button><Button className="ghost" onClick={() => setFactWarnings([])}>取消提醒并保留简历</Button></div></Dialog>
       <Dialog open={showPolish} title="润色这份简历" onClose={() => setShowPolish(false)}><p>可多选。系统先使用你的真实资料，不会自动编造经历。</p><div className="polish-options"><label><input type="checkbox" checked={polishMethods.includes("expand_existing")} onChange={() => togglePolishMethod("expand_existing")} />扩写已有内容<small>在不新增事实的前提下，用 STAR/CAR 思路补足职责、行动和结果表达。</small></label><label><input type="checkbox" checked={polishMethods.includes("adjust_layout")} onChange={() => togglePolishMethod("adjust_layout")} />调整排版密度<small>适度调整字号、行距和段距，让页面更充实、均衡。</small></label><label><input type="checkbox" checked={polishMethods.includes("add_experience")} onChange={() => togglePolishMethod("add_experience")} />补充经历<small>优先加入个人资料库中尚未用于本简历的真实经历。</small></label></div><div className="actions"><Button disabled={busy} onClick={() => runPolish(false)}>开始润色</Button><Button className="ghost" onClick={() => setShowPolish(false)}>取消</Button></div></Dialog>
       <Dialog open={showFabricationRisk} title="确认 AI 编造风险" onClose={() => setShowFabricationRisk(false)}><p>个人资料库中的可用真实经历已经全部使用。继续后，AI 会加入一段没有真实资料依据的经历。</p><p className="risk-note">虚假经历可能在面试、背调或入职后被发现，并影响录用与个人信誉。请仅在你理解并愿意承担风险时继续。</p><div className="actions"><Button className="danger" disabled={busy} onClick={() => runPolish(true)}>我已了解风险，继续编造</Button><Button className="ghost" onClick={() => setShowFabricationRisk(false)}>不编造</Button></div></Dialog>
