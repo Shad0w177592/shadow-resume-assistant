@@ -27,7 +27,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     if (path.endsWith("/draft") && method === "GET") throw new Error("no draft");
     if (path.endsWith("/versions") && method === "GET") return [];
     if (path.endsWith("/resume-config") && method === "PUT") return body;
-    if (path.endsWith("/generate")) return { ...draft, fact_warnings: ["生成内容中的数字“2”没有出现在用户资料或当前原文中"] };
+    if (path.endsWith("/generate")) return { ...draft, fact_warnings: ["AI 为目标岗位补充了专业技能：AI 信息收集，请在使用前核实"] };
     if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };

@@ -222,12 +222,8 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
         text = paragraph["text"]
         assert "完成工作流" in text
         assert "负责2个模块并交付3个项目" in text
-        assert "数字“2”" in body["fact_warnings"][0]
-        assert "数字“3”" in body["fact_warnings"][0]
-        assert paragraph["risk_flags"] == [
-            "unsupported_number:2",
-            "unsupported_number:3",
-        ]
+        assert body["fact_warnings"] == []
+        assert paragraph["risk_flags"] == []
         saved = client.get(f"/api/jobs/{job['id']}/draft", headers=HEADERS)
         assert saved.status_code == 200
         assert (

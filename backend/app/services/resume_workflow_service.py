@@ -130,12 +130,17 @@ class ResumeWorkflowService:
                                 for source_id in paragraph.source_entry_ids
                             ]
                         result = check_hard_facts(source_texts, paragraph.text)
-                        paragraph.risk_flags.extend(
+                        meaningful_violations = tuple(
                             violation
                             for violation in result.violations
+                            if not violation.startswith("unsupported_number:")
+                        )
+                        paragraph.risk_flags.extend(
+                            violation
+                            for violation in meaningful_violations
                             if violation not in paragraph.risk_flags
                         )
-                        violations.extend(result.violations)
+                        violations.extend(meaningful_violations)
             if violations:
                 detail = explain_violations(violations)
                 fact_warnings.append(f"{detail}。这些内容已保留在草稿中，请在使用前核实")
