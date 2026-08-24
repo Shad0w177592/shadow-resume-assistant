@@ -51,6 +51,17 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(await screen.findByText("栏目与取舍")).toBeInTheDocument();
   expect(document.querySelector(".workbench-toolbar-actions")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "生成修改" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "生成简历" }).closest(".primary-actions")).toBeInTheDocument();
+  const workbench = screen.getByLabelText("简历工作台");
+  await user.click(screen.getByRole("button", { name: "收起栏目与取舍" }));
+  expect(workbench).toHaveClass("left-panel-collapsed");
+  expect(screen.getByRole("button", { name: "展开栏目与取舍" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "展开栏目与取舍" }));
+  expect(workbench).not.toHaveClass("left-panel-collapsed");
+  await user.click(screen.getByRole("button", { name: "收起 AI 修改助手" }));
+  expect(workbench).toHaveClass("right-panel-collapsed");
+  await user.click(screen.getByRole("button", { name: "展开 AI 修改助手" }));
+  expect(workbench).not.toHaveClass("right-panel-collapsed");
   await user.type(screen.getByLabelText("项目经历最多使用"), "2");
   await user.selectOptions(screen.getByLabelText("模板"), "technical_double_column");
   await user.selectOptions(screen.getByLabelText("页数"), "2");
