@@ -56,6 +56,21 @@ RESUME_WRITING_METHOD = (
     "始终保持层级清楚、关键词易扫读和整体美观。"
 )
 
+GREETING_MESSAGE_METHOD = (
+    "用于 BOSS 直聘首次沟通的打招呼语按首条消息工作流生成，因为对方回复前可能只有一次完整表达机会。"
+    "第一步从 JD 提取岗位名称、最重要的 1 至 2 项任务或工具；第二步判断候选人属于应届生、"
+    "有经验求职者或转行求职者；第三步只选择 1 至 2 项最能证明匹配度的真实证据；"
+    "第四步按‘Boss您好—身份—岗位证据—可提供的价值—低压力沟通邀请’压缩成一条完整消息。"
+    "应届生优先写专业、相关项目或实习和具体工具；有经验者优先写年限、同类任务和关键成果；"
+    "转行或没有直接经验时写可迁移任务、工具和成果，不主动强调没有经验。"
+    "若真实资料包含最快到岗时间、每周可实习天数或可持续月份，可在身份后前置；资料没有则不得编造。"
+    "首条消息必须独立完整，不能把关键证据留到下一条，也不要假设可以先发图片简历。"
+    "建议 90 至 180 个中文字符，硬上限 400 个字符；每个岗位单独生成，不使用通用话术群发。"
+    "禁止静候您的回复、快速上手、性格开朗、学习能力强、认真负责等无证据套话，"
+    "禁止重复技能、复述整份简历、堆砌公司全称或一次询问薪资福利等多个问题。"
+)
+
+
 class ResumeWorkflowService:
     def __init__(self, database: Database, provider: OpenAITextProvider | None = None) -> None:
         self.database = database
@@ -285,6 +300,7 @@ class ResumeWorkflowService:
             "summary_style_target": summary_style_target,
             "skill_count_target": skill_count_target,
             "page_layout_target": self._page_layout_target(config),
+            "greeting_message_target": self._greeting_message_target(),
             "generate_greeting_message": True,
             "candidate_name": document.personal_info.name,
             "evidence": [
@@ -325,12 +341,7 @@ class ResumeWorkflowService:
             "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
-            "另外生成一条用于 BOSS 直聘首次沟通的打招呼语，必须少于等于 400 个字符。"
-            "采用称呼、身份、岗位证据、可提供的价值、行动邀请五段式结构，以 Boss您好 开头；"
-            "用一句话说明姓名、学历或职业身份，只选 1 至 2 项最贴近 JD 的真实能力或经历证据；"
-            "明确这些能力能帮助完成什么岗位任务，最后礼貌询问是否方便进一步沟通。"
-            "避免复述整份简历、堆砌公司全称和业绩数字，禁止使用尚未入职便表示共事的措辞，"
-            "禁止只写对岗位感兴趣、希望获得机会而没有具体匹配点。建议控制在 90 至 180 个中文字符。"
+            + GREETING_MESSAGE_METHOD
         )
         result = self.provider.complete_json(
             workflow="resume_tailor_profile",
@@ -338,8 +349,15 @@ class ResumeWorkflowService:
             payload=tailor_payload,
             schema=RESUME_TAILOR_SCHEMA,
         )
+        evidence_text = json.dumps(tailor_payload["evidence"], ensure_ascii=False)
+        target_job_title = str(job.get("title") or "").strip()
         quality_issues = self._tailor_quality_issues(
-            result, rewrite_sections, summary_style_target, skill_count_target
+            result,
+            rewrite_sections,
+            summary_style_target,
+            skill_count_target,
+            target_job_title,
+            evidence_text,
         )
         if quality_issues:
             try:
@@ -357,7 +375,12 @@ class ResumeWorkflowService:
                     schema=RESUME_TAILOR_SCHEMA,
                 )
                 retry_issues = self._tailor_quality_issues(
-                    retry_result, rewrite_sections, summary_style_target, skill_count_target
+                    retry_result,
+                    rewrite_sections,
+                    summary_style_target,
+                    skill_count_target,
+                    target_job_title,
+                    evidence_text,
                 )
                 if len(retry_issues) <= len(quality_issues):
                     result = retry_result
@@ -482,10 +505,43 @@ class ResumeWorkflowService:
     def _fallback_greeting_message(document: ResumeDocument, job: dict[str, Any]) -> str:
         name = document.personal_info.name.strip() or "候选人"
         title = str(job.get("title") or "目标").strip()
+        evidence = ""
+        section_priority = ("skills", "project", "internship", "work", "campus")
+        by_key = {section.section_key: section for section in document.sections}
+        for section_key in section_priority:
+            section = by_key.get(section_key)
+            if section is None or not section.blocks:
+                continue
+            block = section.blocks[0]
+            paragraph = next(
+                (item.text.strip() for item in block.paragraphs if item.text.strip()), ""
+            )
+            if not paragraph:
+                continue
+            paragraph = re.sub(r"\s+", "", paragraph)[:64].rstrip("，。；; ")
+            if section_key == "skills" and block.heading.strip():
+                evidence = f"我具备{block.heading.strip()}，{paragraph}"
+            else:
+                evidence = f"我在{section.title}中{paragraph}"
+            break
+        if not evidence:
+            evidence = "我会基于简历中的真实经历支持岗位相关任务"
         return (
-            f"Boss您好，我是{name}，关注到贵司的{title}岗位。"
-            "我的相关经历与岗位要求具有匹配点，希望有机会进一步介绍，方便时期待与您沟通，谢谢。"
+            f"Boss您好，我是{name}，想应聘{title}岗位。{evidence}，"
+            f"可以支持{title}岗位的相关任务与交付。如果您认为方向匹配，希望方便时进一步沟通，谢谢。"
         )[:400]
+
+    @staticmethod
+    def _greeting_message_target() -> dict[str, Any]:
+        return {
+            "channel": "BOSS直聘首次沟通",
+            "single_message_only": True,
+            "recommended_character_min": 90,
+            "recommended_character_max": 180,
+            "hard_character_max": 400,
+            "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
+            "availability_only_when_evidenced": True,
+        }
 
     @staticmethod
     def _summary_style_target(original_summary: str) -> dict[str, int]:
@@ -509,6 +565,8 @@ class ResumeWorkflowService:
         rewrite_sections: set[str],
         summary_style_target: dict[str, int],
         skill_count_target: int | None = None,
+        target_job_title: str = "",
+        evidence_text: str = "",
     ) -> list[str]:
         issues = []
         greeting = str(
@@ -531,6 +589,29 @@ class ResumeWorkflowService:
             issues.append("打招呼语结尾缺少明确、礼貌的沟通邀请")
         if greeting and not re.search(r"可用于|能够|可以|经验|能力|熟悉|擅长", greeting):
             issues.append("打招呼语没有说明候选人能为岗位提供的具体价值")
+        job_tokens = re.findall(r"[A-Za-z0-9+#.]{2,}|[\u4e00-\u9fff]{2,}", target_job_title)
+        if target_job_title and job_tokens and not any(
+            token.lower() in greeting.lower() for token in job_tokens
+        ):
+            issues.append("打招呼语没有明确写出当前目标岗位")
+        evidence_anchor = re.search(
+            r"Excel|SQL|Python|PPT|Word|Office|ChatGPT|DeepSeek|Codex|项目|实习|"
+            r"复盘|分析|搭建|优化|跟进|统计|交付|拍摄|剪辑|写作|招募|直播|调研|\d",
+            greeting,
+            re.IGNORECASE,
+        )
+        generic_phrases = ("静候您的回复", "快速上手", "性格开朗", "学习能力强", "认真负责")
+        if any(value in greeting for value in generic_phrases):
+            issues.append("打招呼语包含无证据套话，应改为工具、任务、项目或成果证据")
+        if greeting and not evidence_anchor:
+            issues.append("打招呼语缺少可核实的工具、任务、项目、经历或成果证据")
+        availability_claim = re.search(
+            r"(?:随时|立即|最快.{0,8})到岗|一周(?:[1-7一二三四五六七])天|"
+            r"(?:实习|到岗).{0,8}(?:个?月|个月)",
+            greeting,
+        )
+        if availability_claim and availability_claim.group(0) not in evidence_text:
+            issues.append("打招呼语中的到岗时间或实习周期没有资料依据")
         if "summary" in rewrite_sections:
             summary = str(result.get("summary") or "").strip()
             compact_length = len(re.sub(r"\s+", "", summary))

@@ -277,6 +277,16 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     }
     assert document.greeting_message.startswith("Boss您好")
     assert "BOSS 直聘首次沟通" in provider.request["instructions"]
+    assert "对方回复前可能只有一次完整表达机会" in provider.request["instructions"]
+    assert provider.request["payload"]["greeting_message_target"] == {
+        "channel": "BOSS直聘首次沟通",
+        "single_message_only": True,
+        "recommended_character_min": 90,
+        "recommended_character_max": 180,
+        "hard_character_max": 400,
+        "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
+        "availability_only_when_evidenced": True,
+    }
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
     assert "严格遵守 payload.skill_count_target" in provider.request["instructions"]
 
@@ -327,6 +337,89 @@ def test_layout_fill_thresholds_follow_selected_page_count() -> None:
     assert one_result["minimum"] == 1400
     assert two_result["status"] == "underfilled"
     assert two_result["minimum"] == 2325
+
+
+def test_fallback_greeting_uses_resume_evidence_and_target_job() -> None:
+    config = {
+        "template": "single_column",
+        "page_target": 1,
+        "rewrite_sections": [],
+        "sections": [
+            {
+                "section_key": "summary",
+                "title": "自我介绍",
+                "enabled": False,
+                "order": 0,
+                "column": "full",
+                "max_entries": None,
+            },
+            {
+                "section_key": "skills",
+                "title": "专业技能",
+                "enabled": True,
+                "order": 1,
+                "column": "full",
+                "max_entries": 1,
+            },
+        ],
+    }
+    entries = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "section_key": "skills",
+            "title": "Excel 数据分析",
+            "payload": {"content": "使用 Excel 整理渠道数据并完成活动复盘"},
+        }
+    ]
+    document = ResumeWorkflowService._build_document(
+        config, {"name": "杨丰铭"}, entries
+    )
+
+    greeting = ResumeWorkflowService._fallback_greeting_message(
+        document, {"title": "电商运营"}
+    )
+
+    assert greeting.startswith("Boss您好，我是杨丰铭，想应聘电商运营岗位")
+    assert "Excel 数据分析" in greeting
+    assert "整理渠道数据并完成活动复盘" in greeting
+    assert "具有匹配点" not in greeting
+
+def test_greeting_message_quality_rejects_generic_and_unsupported_availability() -> None:
+    generic = {
+        "greeting_message": (
+            "Boss您好，我想应聘电商运营岗位，性格开朗、学习能力强，可以快速上手，"
+            "静候您的回复，希望方便时进一步沟通。"
+        ),
+        "summary": "",
+        "skills": [],
+    }
+    generic_issues = ResumeWorkflowService._tailor_quality_issues(
+        generic,
+        set(),
+        {"character_min": 0, "character_max": 200, "sentence_target": 0},
+        target_job_title="电商运营",
+    )
+
+    assert any("无证据套话" in issue for issue in generic_issues)
+    assert any("缺少可核实" in issue for issue in generic_issues)
+
+    unsupported_availability = {
+        "greeting_message": (
+            "Boss您好，我想应聘电商运营岗位，具备 Excel 数据复盘经验，可以支持活动数据跟踪，"
+            "能够立即到岗，希望方便时进一步沟通。"
+        ),
+        "summary": "",
+        "skills": [],
+    }
+    availability_issues = ResumeWorkflowService._tailor_quality_issues(
+        unsupported_availability,
+        set(),
+        {"character_min": 0, "character_max": 200, "sentence_target": 0},
+        target_job_title="电商运营",
+        evidence_text="Excel 数据复盘",
+    )
+
+    assert any("到岗时间或实习周期没有资料依据" in issue for issue in availability_issues)
 
 def test_greeting_message_quality_checks_structure_and_limit() -> None:
     valid = {
