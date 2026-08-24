@@ -459,6 +459,7 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
             for warning in body["fact_warnings"]
         )
         assert len(requests) == 1
+        assert "2 至 4 条可扫读要点" in requests[0]["instructions"]
         sent_source_ids = [
             source_id
             for paragraph in requests[0]["payload"]["paragraphs"]

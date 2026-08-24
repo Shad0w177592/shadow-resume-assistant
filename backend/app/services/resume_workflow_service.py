@@ -37,6 +37,20 @@ WORKFLOW_STEPS = [
     "SAVE_DRAFT",
 ]
 
+RESUME_WRITING_METHOD = (
+    "统一采用以下简历写作方法：简历不是经历流水账，而是供招聘者快速核验的岗位证据页。"
+    "先按 JD 将最相关、最重要且可核实的经历前置，但不要把不相关经历硬改成目标行业经历。"
+    "每个经历按‘任务背景—本人行动—方法或工具—结果’组织，正文优先拆成 2 至 4 条可扫读要点；"
+    "资料较少时宁可保留 1 至 2 条真实要点，也不得用空话补满。每条只表达一个主要信息，"
+    "使用负责、分析、搭建、优化、跟进、统计、复盘、交付等明确动作，并写清动作对象。"
+    "若原始资料已有数字，视为用户提供的证据，可以直接使用；尽量同时交代统计范围、周期、"
+    "前后变化或个人贡献，使数字可解释。资料没有比较基准时不得虚构基准，也不得新增公司、岗位、"
+    "日期、工具、数字或业绩。删除赋能、助力、沉淀、显著提升等无法单独证明价值的套话。"
+    "经历栏目负责展示事实与成果，不要在每条末尾生硬追加‘可用于目标岗位’；"
+    "能力如何迁移到目标岗位，应集中在自我介绍和打招呼语中说明。"
+    "同一技能只出现一次，技能标题写具体工具或可交付能力；整体以一页优先、层级清楚、"
+    "关键词易扫读为目标，不靠缩小字号和堆满文字制造丰富感。"
+)
 
 class ResumeWorkflowService:
     def __init__(self, database: Database, provider: OpenAITextProvider | None = None) -> None:
@@ -218,6 +232,7 @@ class ResumeWorkflowService:
         result = self.provider.complete_json(
             workflow="resume_rewrite",
             instructions=(
+                RESUME_WRITING_METHOD +
                 "你是中文简历编辑器。只重写用户勾选栏目中给定的段落；未勾选栏目不会发送给你。"
                 "不新增公司、岗位、学校、日期、技能、数字或成果。"
                 "每个 paragraph_id 必须原样返回且只返回一次；"
@@ -276,6 +291,7 @@ class ResumeWorkflowService:
             ],
         }
         instructions = (
+            RESUME_WRITING_METHOD +
             "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
             "先依据完整 JD 识别目标岗位的核心任务、交付物、工具和能力，再结合候选人证据写作。"
             "自我介绍必须保持原文的篇幅和信息密度，严格按 payload.summary_style_target 的字符范围"

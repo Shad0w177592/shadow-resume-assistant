@@ -268,6 +268,7 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     )
     assert len(skills.blocks) == 3
     assert provider.request["payload"]["skill_count_target"] == 3
+    assert "统计范围、周期、前后变化" in provider.request["instructions"]
     assert document.greeting_message.startswith("Boss您好")
     assert "BOSS 直聘首次沟通" in provider.request["instructions"]
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
