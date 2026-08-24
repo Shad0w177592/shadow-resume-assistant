@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../api";
 import { Button, Card, EmptyState, TextInput } from "../components/ui";
 import { useNotifications } from "../components/Notifications";
@@ -22,6 +22,7 @@ export function ProfilePage() {
   const [content, setContent] = useState("");
   const [importance, setImportance] = useState(3);
   const [photoData, setPhotoData] = useState("");
+  const entryFormRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!window.shadowDesktop) { setLoaded(true); return; }
@@ -67,6 +68,10 @@ export function ProfilePage() {
     setEditingId(entry.id); setSectionKey(entry.section_key); setTitle(entry.title || "");
     setContent(String(entry.payload.content || ""));
     setImportance(entry.importance || 3);
+    window.requestAnimationFrame(() => {
+      entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      entryFormRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+    });
   }
 
   async function duplicate(entry: ProfileEntry) {
@@ -107,6 +112,7 @@ export function ProfilePage() {
         <label className="field"><span>自我介绍（选填）</span><textarea value={profile.personal_info.summary || ""} onChange={(event) => changePersonal("summary", event.target.value)} /></label>
         <p className="save-state" aria-live="polite">{saveState}</p>
       </Card>
+      <div ref={entryFormRef} className="profile-entry-editor">
       <Card title={editingId ? "编辑经历" : "新增经历"}>
         <form onSubmit={submitEntry} className="entry-form">
           <label className="field"><span>栏目</span><select value={sectionKey} onChange={(event) => setSectionKey(event.target.value)}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -116,6 +122,7 @@ export function ProfilePage() {
           <div className="actions"><Button type="submit">{editingId ? "保存修改" : "新增经历"}</Button>{editingId && <Button type="button" className="secondary" onClick={() => setEditingId(null)}>取消</Button>}</div>
         </form>
       </Card>
+      </div>
       <Card title="资料条目">
         {profile.entries.length === 0 ? <EmptyState title="还没有经历" description="只填写你实际拥有的内容；缺少成果、技能或时间都可以留空。" /> : <ul className="record-list">{profile.entries.map((entry) => <li key={entry.id}><div><strong>{entry.title || "未命名经历"}</strong><span>{categories.find(([key]) => key === entry.section_key)?.[1] || entry.section_key} · 重要程度：{entry.importance || 3}/5</span></div><div className="inline-actions"><Button className="ghost" onClick={() => edit(entry)}>编辑</Button><Button className="ghost" onClick={() => duplicate(entry)}>复制</Button><Button className="danger" onClick={() => remove(entry)}>删除</Button></div></li>)}</ul>}
       </Card>

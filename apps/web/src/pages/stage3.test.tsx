@@ -48,6 +48,13 @@ test("profile fields are optional and a free-form entry can be added", async () 
   expect(screen.getByRole("option", { name: "其他自定义经历或成果" })).toBeInTheDocument();
   expect(screen.getByText(/其他自定义经历或成果 · 重要程度/)).toBeInTheDocument();
   expect(request).toHaveBeenCalledWith("/api/profile/entries", "POST", expect.objectContaining({ importance: 5 }));
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+  await user.click(screen.getByRole("button", { name: "编辑" }));
+  expect(await screen.findByText("编辑经历")).toBeInTheDocument();
+  await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" }));
+  expect(screen.getByLabelText("标题（选填）")).toHaveFocus();
+  expect(screen.getByLabelText("标题（选填）")).toHaveValue("开源社区");
 });
 
 test("a job can generate a read-only evidence-backed draft preview", async () => {
