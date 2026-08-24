@@ -134,12 +134,14 @@ def test_custom_base_url_is_normalized_persisted_and_validated(
                 "model": "gateway-model",
                 "api_mode": "chat_completions",
                 "base_url": "https://gateway.example.com/openai/v1///",
+                "transcription_model": "whisper-1",
                 "voice_device_id": None,
             },
         )
         assert saved.status_code == 200
         assert saved.json()["base_url"] == "https://gateway.example.com/openai/v1"
         assert saved.json()["api_mode"] == "chat_completions"
+        assert saved.json()["transcription_model"] == "whisper-1"
         assert client.get("/api/settings", headers=headers).json()["base_url"] == (
             "https://gateway.example.com/openai/v1"
         )

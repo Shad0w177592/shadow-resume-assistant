@@ -378,6 +378,8 @@ async def transcribe_audio(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         raise HTTPException(status_code=502, detail="语音转写失败，请重试或使用文字输入") from error
     return {"text": text}

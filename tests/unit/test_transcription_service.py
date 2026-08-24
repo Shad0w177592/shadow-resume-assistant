@@ -10,6 +10,7 @@ from app.services.transcription_service import TranscriptionService
 class FakeOpenAI:
     should_fail = False
     options = {}
+    request = {}
 
     def __init__(self, api_key: str, **kwargs) -> None:
         assert api_key == "sk-test-key"
@@ -17,7 +18,8 @@ class FakeOpenAI:
         self.audio = SimpleNamespace(transcriptions=SimpleNamespace(create=self.create))
 
     @classmethod
-    def create(cls, **_kwargs):
+    def create(cls, **kwargs):
+        cls.request = kwargs
         if cls.should_fail:
             raise RuntimeError("network")
         return SimpleNamespace(text="请把这一段写得更简洁")
@@ -43,7 +45,10 @@ def test_transcription_uses_configured_gateway(monkeypatch, tmp_path: Path) -> N
     class Database:
         @staticmethod
         def get_setting(_key, _default):
-            return {"base_url": "https://gateway.example.com/v1"}
+            return {
+                "base_url": "https://gateway.example.com/v1",
+                "transcription_model": "whisper-1",
+            }
 
     monkeypatch.setattr("app.services.transcription_service.OpenAI", FakeOpenAI)
     credentials = InMemoryCredentialStore()
@@ -51,6 +56,8 @@ def test_transcription_uses_configured_gateway(monkeypatch, tmp_path: Path) -> N
     service = TranscriptionService(credentials, tmp_path, Database())
     assert service.transcribe(b"voice")
     assert FakeOpenAI.options["base_url"] == "https://gateway.example.com/v1"
+    assert FakeOpenAI.request["model"] == "whisper-1"
+    assert FakeOpenAI.request["language"] == "zh"
 
 
 def test_transcription_requires_api_key(tmp_path: Path) -> None:

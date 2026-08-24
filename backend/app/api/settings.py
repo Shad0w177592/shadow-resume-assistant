@@ -34,6 +34,7 @@ class SettingsUpdate(BaseModel):
     model: str = "gpt-5-mini"
     api_mode: Literal["responses", "chat_completions"] = "responses"
     base_url: str = ""
+    transcription_model: str = Field(default="gpt-transcribe", min_length=1, max_length=120)
     voice_device_id: str | None = None
 
     @field_validator("base_url")
@@ -94,6 +95,7 @@ def get_settings(app: Annotated[AppServices, Depends(services)]) -> dict[str, An
             "model": "gpt-5-mini",
             "api_mode": "responses",
             "base_url": "",
+            "transcription_model": "gpt-transcribe",
             "voice_device_id": None,
         },
     )

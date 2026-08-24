@@ -12,7 +12,7 @@ afterEach(() => {
 
 test("backup restore and exact clear confirmation are available from settings", async () => {
   const request = vi.fn(async (path: string, method = "GET") => {
-    if (path === "/api/settings") return { model: "gpt-5-mini", api_mode: "chat_completions", base_url: "https://gateway.example.com/v1" };
+    if (path === "/api/settings") return { model: "gpt-5-mini", api_mode: "chat_completions", base_url: "https://gateway.example.com/v1", transcription_model: "whisper-1" };
     if (path === "/api/bootstrap") return { data_directory: "C:\\data", api_key_configured: true };
     if (path === "/api/backups" && method === "POST") return { path: "C:\\data\\backups\\backup.zip" };
     if (path === "/api/backups/restore") return { restored_files: 3, automatic_backup: "C:\\data\\backups\\auto.zip" };
@@ -30,12 +30,14 @@ test("backup restore and exact clear confirmation are available from settings", 
   expect(await screen.findByText("状态：已配置")).toBeInTheDocument();
   expect(screen.getByLabelText("Base URL（选填）")).toHaveValue("https://gateway.example.com/v1");
   expect(screen.getByLabelText("接口模式")).toHaveValue("chat_completions");
+  expect(screen.getByLabelText("语音转写模型")).toHaveValue("whisper-1");
   await user.click(screen.getByRole("button", { name: "保存设置" }));
   expect(request).toHaveBeenCalledWith("/api/settings", "PUT", {
     provider: "openai",
     model: "gpt-5-mini",
     api_mode: "chat_completions",
     base_url: "https://gateway.example.com/v1",
+    transcription_model: "whisper-1",
     voice_device_id: null,
   });
   await user.click(screen.getByRole("button", { name: "更改保存位置" }));

@@ -73,10 +73,10 @@ test("returns actionable Windows recognizer errors", async () => {
   assert.match(recognitionScript("C:\\voice.wav"), /DictationGrammar/);
 });
 
-test("desktop speech IPC stays local and has no API transcription fallback", async () => {
+test("desktop speech IPC uses the authenticated AI transcription backend", async () => {
   const mainSource = await fs.readFile(path.join(__dirname, "..", "src", "main.cjs"), "utf8");
-  assert.match(mainSource, /transcribeWindowsChinese\(bytes\)/);
-  assert.doesNotMatch(mainSource, /api\/transcriptions|gpt-4o-mini-transcribe/);
+  assert.match(mainSource, /transcribeWithBackend/);
+  assert.doesNotMatch(mainSource, /transcribeWindowsChinese/);
 });
 
 test("recognizes synthesized Chinese with the installed Windows engine", {

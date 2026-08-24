@@ -8,6 +8,7 @@ export function SettingsPage() {
   const [model, setModel] = useState("gpt-5-mini");
   const [apiMode, setApiMode] = useState<"responses" | "chat_completions">("responses");
   const [baseUrl, setBaseUrl] = useState("");
+  const [transcriptionModel, setTranscriptionModel] = useState("gpt-transcribe");
   const [apiKey, setApiKey] = useState("");
   const [dataDirectory, setDataDirectory] = useState("加载中…");
   const [configured, setConfigured] = useState(false);
@@ -28,12 +29,13 @@ export function SettingsPage() {
   useEffect(() => {
     if (!window.shadowDesktop) { setDataDirectory("仅桌面应用可查看"); return; }
     Promise.all([
-      apiRequest<{ model: string; api_mode?: "responses" | "chat_completions"; base_url?: string }>("/api/settings"),
+      apiRequest<{ model: string; api_mode?: "responses" | "chat_completions"; base_url?: string; transcription_model?: string }>("/api/settings"),
       apiRequest<{ data_directory: string; api_key_configured: boolean }>("/api/bootstrap"),
     ]).then(([settings, bootstrap]) => {
       setModel(settings.model);
       setApiMode(settings.api_mode || "responses");
       setBaseUrl(settings.base_url || "");
+      setTranscriptionModel(settings.transcription_model || "gpt-transcribe");
       setDataDirectory(bootstrap.data_directory);
       setConfigured(bootstrap.api_key_configured);
     }).catch((error) => notify(error.message, "error"));
@@ -41,7 +43,7 @@ export function SettingsPage() {
 
   async function save() {
     try {
-      await apiRequest("/api/settings", "PUT", { provider: "openai", model, api_mode: apiMode, base_url: baseUrl, voice_device_id: null });
+      await apiRequest("/api/settings", "PUT", { provider: "openai", model, api_mode: apiMode, base_url: baseUrl, transcription_model: transcriptionModel, voice_device_id: null });
       if (apiKey) {
         await apiRequest("/api/credentials/openai", "PUT", { api_key: apiKey });
         setConfigured(true);
@@ -106,10 +108,12 @@ export function SettingsPage() {
           <TextInput label="模型" value={model} onChange={(event) => setModel(event.target.value)} />
           <TextInput label="Base URL（选填）" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
           <small>OpenAI 官方请选择 Responses API；JUAPI 请选择 Chat Completions。请填写 API 根地址，不要附加具体接口路径。</small>
+          <TextInput label="语音转写模型" value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)} />
+          <small>OpenAI 官方推荐 gpt-transcribe；JUAPI 等中转网关请填写其实际支持的语音模型，例如 whisper-1。语音转写与上面的文本模型相互独立。</small>
           <TextInput label="替换 API Key（选填）" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
           <Button onClick={save}>保存设置</Button>
         </Card>
-        <Card title="语音设备"><p>将在语音修改阶段显示麦克风权限和设备状态。文字输入始终可用。</p></Card>
+        <Card title="语音设备"><p>录音会发送给已配置的 OpenAI 或兼容网关完成中文转写；API Key 仍只保存在本机凭据管理器中。文字输入始终可用。</p></Card>
         <Card title="本地数据"><p className="path-text">{dataDirectory}</p><p>可以改到 D 盘等任意可写位置。请选择一个空文件夹；切换前会自动备份并复制数据，旧目录继续保留为安全副本。</p><div className="actions"><Button disabled={dataOperation} onClick={changeDataDirectory}>更改保存位置</Button><Button disabled={dataOperation} onClick={createBackup}>导出全部备份</Button><Button disabled={dataOperation} className="secondary" onClick={restoreBackup}>从备份恢复</Button></div>{backupPath && <p className="path-text">最近备份：{backupPath}</p>}</Card>
         <Card title="软件信息"><p>影子简历助手 0.2.0 · 本地优先桌面版</p></Card>
         <Card title="危险操作"><p className="warning-text">清除个人资料、源文件、岗位、草稿和历史版本。此操作不可撤销。</p><TextInput label="输入“清除全部数据”确认" value={clearText} onChange={(event) => setClearText(event.target.value)} /><label className="check"><input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} />同时删除 API Key</label><Button className="danger" disabled={clearText !== "清除全部数据"} onClick={clearAll}>清除全部数据</Button></Card>

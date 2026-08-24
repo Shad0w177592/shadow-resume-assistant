@@ -2,7 +2,7 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { createSidecarSupervisor, waitForUrl } = require("./sidecar.cjs");
 const { validateWebBundle } = require("./web-bundle.cjs");
-const { transcribeWindowsChinese } = require("./windows-speech.cjs");
+const { transcribeWithBackend } = require("./audio-transcription.cjs");
 const {
   copyManagedData,
   readConfiguredDataDirectory,
@@ -129,12 +129,12 @@ async function createWindow() {
     }
   });
   ipcMain.handle("audio:transcribe", async (_event, request) => {
-    const bytes = request?.bytes;
-    const mediaType = String(request?.mediaType || "audio/wav");
-    if (mediaType !== "audio/wav" && mediaType !== "audio/wave") {
-      throw new Error("录音格式转换失败，请重新录音");
-    }
-    return { text: await transcribeWindowsChinese(bytes) };
+    return transcribeWithBackend({
+      bytes: request?.bytes,
+      mediaType: String(request?.mediaType || "audio/wav"),
+      baseUrl: sidecarSupervisor.current.baseUrl,
+      token: sidecarSupervisor.current.token,
+    });
   });
   const window = new BrowserWindow({
     width: 1280,
