@@ -83,7 +83,8 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(workbench).toHaveClass("right-panel-collapsed");
   await user.click(screen.getByRole("button", { name: "展开 AI 修改助手" }));
   expect(workbench).not.toHaveClass("right-panel-collapsed");
-  const projectLimit = screen.getByLabelText("项目经历最多使用");
+  expect(screen.getAllByText("使用多少条").length).toBeGreaterThan(0);
+  const projectLimit = screen.getByLabelText("项目经历使用条数");
   expect(projectLimit).toHaveValue("");
   expect(projectLimit.closest(".section-limit")).toBeInTheDocument();
   await user.selectOptions(projectLimit, "2");

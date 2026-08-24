@@ -431,8 +431,8 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
 .workbench-left .section-option .check { min-width: 0; white-space: normal; font-size: 14px; font-weight: 700; line-height: 1.45; }
 .workbench-left .section-option .check input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--rose); }
 .workbench-left .section-option .section-limit {
-  display: grid; grid-template-columns: minmax(0, 1fr) 92px; align-items: center; gap: 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 7px;
   margin: 0; padding: 9px 10px; white-space: nowrap; background: #f4e8dc; border: 1px solid #e2d1c1; border-radius: 6px;
 }
 .workbench-left .section-option .section-limit span { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
-.workbench-left .section-option .section-limit select { width: 92px; min-width: 92px; height: 38px; padding: 0 10px; text-align: center; background: #fffdf9; font-weight: 700; }
+.workbench-left .section-option .section-limit select { width: 100%; min-width: 0; height: 40px; padding: 0 12px; text-align: left; background: #fffdf9; font-size: 14px; font-weight: 700; }
