@@ -194,6 +194,7 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
             self.request = request
             return {
                 "summary": "",
+                "greeting_message": "Boss您好，我是杨丰铭，具备 AI 工具应用和数据复盘经验，可以支持电商运营的数据整理与活动优化，希望方便时进一步沟通。",
                 "skills": [
                     {
                         "heading": "AI 工具应用",
@@ -267,6 +268,8 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     )
     assert len(skills.blocks) == 3
     assert provider.request["payload"]["skill_count_target"] == 3
+    assert document.greeting_message.startswith("Boss您好")
+    assert "BOSS 直聘首次沟通" in provider.request["instructions"]
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
     assert "严格遵守 payload.skill_count_target" in provider.request["instructions"]
 
@@ -296,3 +299,29 @@ def test_explicit_section_count_is_not_reduced_by_page_budget() -> None:
 
     assert len(result) == 3
     assert not any("页数预算省略" in warning for warning in warnings)
+
+
+def test_greeting_message_quality_checks_structure_and_limit() -> None:
+    valid = {
+        "greeting_message": (
+            "Boss您好，我是经济学专业应届生，具备 Excel 数据复盘和内容运营经验，"
+            "可以支持电商岗位的日常数据跟踪与活动执行，希望方便时进一步沟通，谢谢。"
+        ),
+        "summary": "",
+        "skills": [],
+    }
+    assert ResumeWorkflowService._tailor_quality_issues(
+        valid, set(), {"character_min": 0, "character_max": 200, "sentence_target": 0}
+    ) == []
+
+    invalid = {
+        "greeting_message": "你好，很高兴与您共事，希望给个机会。",
+        "summary": "",
+        "skills": [],
+    }
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        invalid, set(), {"character_min": 0, "character_max": 200, "sentence_target": 0}
+    )
+    assert any("过短" in issue for issue in issues)
+    assert any("Boss您好" in issue for issue in issues)
+    assert any("尚未入职" in issue for issue in issues)

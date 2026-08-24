@@ -47,6 +47,7 @@ class ResumeDocument(BaseModel):
     template: ResumeTemplate
     page_target: int = Field(ge=1, le=2)
     layout_density: str = "auto"
+    greeting_message: str = Field(default="", max_length=400)
     personal_info: PersonalInfo
     sections: list[ResumeSection]
 

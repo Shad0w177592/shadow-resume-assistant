@@ -47,9 +47,10 @@ RESUME_REWRITE_SCHEMA = {
 RESUME_TAILOR_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["summary", "skills"],
+    "required": ["summary", "skills", "greeting_message"],
     "properties": {
         "summary": {"type": "string"},
+        "greeting_message": {"type": "string", "maxLength": 400},
         "skills": {
             "type": "array",
             "maxItems": 20,

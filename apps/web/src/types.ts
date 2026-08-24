@@ -29,6 +29,7 @@ export type ResumeDraft = {
   id: string;
   job_target_id: string;
   document: {
+    greeting_message?: string;
     personal_info: { name: string; headline: string; contacts: string[] };
     sections: Array<{
       section_id: string;

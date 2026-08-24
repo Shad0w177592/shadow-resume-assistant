@@ -436,3 +436,20 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
 }
 .workbench-left .section-option .section-limit span { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
 .workbench-left .section-option .section-limit select { width: 100%; min-width: 0; height: 40px; padding: 0 12px; text-align: left; background: #fffdf9; font-size: 14px; font-weight: 700; }
+
+/* Job-specific BOSS greeting message */
+.greeting-message-card {
+  margin: 4px 0 20px; padding: 14px; background: #fffaf3;
+  border: 1px solid #d8c5b3; border-radius: 8px; box-shadow: 0 2px 0 rgba(45, 36, 31, .08);
+}
+.greeting-message-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.greeting-message-heading h3 { margin: 0; color: var(--ink); font-size: 16px; }
+.greeting-message-heading span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.greeting-message-card > p { margin: 7px 0 10px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.greeting-message-card textarea {
+  width: 100%; min-height: 150px; padding: 11px 12px; resize: vertical;
+  color: var(--ink); background: #fffdf8; border: 1px solid #bda994; border-radius: 5px;
+  font: inherit; font-size: 13px; line-height: 1.7;
+}
+.greeting-message-card textarea:focus { outline: 2px solid rgba(179, 78, 104, .22); border-color: var(--rose); }
+.greeting-message-card .actions { margin-top: 10px; }

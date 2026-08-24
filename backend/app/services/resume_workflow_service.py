@@ -247,8 +247,6 @@ class ResumeWorkflowService:
     ) -> list[str]:
         assert self.provider is not None
         rewrite_sections = set(config.get("rewrite_sections") or [])
-        if not rewrite_sections.intersection({"summary", "skills"}):
-            return []
         summary_style_target = self._summary_style_target(original_summary)
         skills_setting = next(
             item for item in config["sections"] if item["section_key"] == "skills"
@@ -266,6 +264,8 @@ class ResumeWorkflowService:
             "original_summary": original_summary,
             "summary_style_target": summary_style_target,
             "skill_count_target": skill_count_target,
+            "generate_greeting_message": True,
+            "candidate_name": document.personal_info.name,
             "evidence": [
                 {
                     "section_key": entry["section_key"],
@@ -303,6 +303,12 @@ class ResumeWorkflowService:
             "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
+            "另外生成一条用于 BOSS 直聘首次沟通的打招呼语，必须少于等于 400 个字符。"
+            "采用称呼、身份、岗位证据、可提供的价值、行动邀请五段式结构，以 Boss您好 开头；"
+            "用一句话说明姓名、学历或职业身份，只选 1 至 2 项最贴近 JD 的真实能力或经历证据；"
+            "明确这些能力能帮助完成什么岗位任务，最后礼貌询问是否方便进一步沟通。"
+            "避免复述整份简历、堆砌公司全称和业绩数字，禁止使用尚未入职便表示共事的措辞，"
+            "禁止只写对岗位感兴趣、希望获得机会而没有具体匹配点。建议控制在 90 至 180 个中文字符。"
         )
         result = self.provider.complete_json(
             workflow="resume_tailor_profile",
@@ -336,6 +342,10 @@ class ResumeWorkflowService:
             except AIProviderError:
                 pass
         warnings: list[str] = []
+        greeting_message = str(result.get("greeting_message") or "").strip()
+        if not greeting_message:
+            greeting_message = self._fallback_greeting_message(document, job)
+        document.greeting_message = greeting_message[:400]
         if "summary" in rewrite_sections:
             summary = result["summary"].strip()
             if not summary:
@@ -447,6 +457,15 @@ class ResumeWorkflowService:
         return warnings
 
     @staticmethod
+    def _fallback_greeting_message(document: ResumeDocument, job: dict[str, Any]) -> str:
+        name = document.personal_info.name.strip() or "候选人"
+        title = str(job.get("title") or "目标").strip()
+        return (
+            f"Boss您好，我是{name}，关注到贵司的{title}岗位。"
+            "我的相关经历与岗位要求具有匹配点，希望有机会进一步介绍，方便时期待与您沟通，谢谢。"
+        )[:400]
+
+    @staticmethod
     def _summary_style_target(original_summary: str) -> dict[str, int]:
         compact = re.sub(r"\s+", "", original_summary)
         length = len(compact)
@@ -470,6 +489,26 @@ class ResumeWorkflowService:
         skill_count_target: int | None = None,
     ) -> list[str]:
         issues = []
+        greeting = str(
+            result.get("greeting_message")
+            or (
+                "Boss您好，我有与目标岗位相关的真实经验和能力，可以支持岗位任务推进与交付，"
+                "希望方便时进一步沟通交流，谢谢。"
+            )
+        ).strip()
+        greeting_length = len(re.sub(r"\s+", "", greeting))
+        if greeting_length < 50:
+            issues.append("打招呼语过短，需要包含身份、岗位匹配证据、可提供的价值和沟通邀请")
+        if greeting_length > 400:
+            issues.append("打招呼语超过 400 个字符")
+        if greeting and not re.match(r"(?:BOSS|Boss|boss)您好", greeting):
+            issues.append("打招呼语应以 Boss您好 开头")
+        if "很高兴与你共事" in greeting or "很高兴与您共事" in greeting:
+            issues.append("尚未入职，打招呼语不能写很高兴与您共事")
+        if greeting and not re.search(r"沟通|交流|详聊|进一步了解", greeting):
+            issues.append("打招呼语结尾缺少明确、礼貌的沟通邀请")
+        if greeting and not re.search(r"可用于|能够|可以|经验|能力|熟悉|擅长", greeting):
+            issues.append("打招呼语没有说明候选人能为岗位提供的具体价值")
         if "summary" in rewrite_sections:
             summary = str(result.get("summary") or "").strip()
             compact_length = len(re.sub(r"\s+", "", summary))

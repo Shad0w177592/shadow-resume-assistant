@@ -171,6 +171,15 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
                     }
                 ]
             }
+        if request["workflow"] == "resume_tailor_profile":
+            return {
+                "summary": "",
+                "skills": [],
+                "greeting_message": (
+                    "Boss您好，我具备 Python 项目经验，可以支持 AI Agent 岗位的项目开发与交付，"
+                    "希望方便时进一步沟通。"
+                ),
+            }
         return {
             "paragraphs": [
                 {
@@ -232,7 +241,7 @@ def test_production_api_path_calls_ai_for_job_parse_and_resume_rewrite(
                 "text"
             ]
         )
-    assert calls == ["job_parse", "resume_rewrite"]
+    assert calls == ["job_parse", "resume_rewrite", "resume_tailor_profile"]
 
 
 def test_generation_respects_section_limit_and_user_importance(
@@ -321,6 +330,7 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
         if request["workflow"] == "resume_tailor_profile":
             return {
                 "summary": "传媒工作培养了沟通协作能力，能够用于 AI 项目需求澄清与跨团队推进。",
+                "greeting_message": "Boss您好，我是杨丰铭，具备 AI 工具应用和沟通协作经验，可以支持 AI 岗位的需求澄清与项目推进，希望方便时进一步沟通。",
                 "skills": [
                     {
                         "heading": "AI Agent 项目交付",
@@ -412,6 +422,9 @@ def test_selected_summary_and_skills_are_tailored_without_changing_work(
             section["section_key"]: section for section in body["document"]["sections"]
         }
         assert body["document"]["personal_info"]["headline"] == ""
+        assert body["document"]["greeting_message"].startswith("Boss您好")
+        saved_draft = client.get(f"/api/jobs/{job['id']}/draft", headers=HEADERS).json()
+        assert saved_draft["document"]["greeting_message"] == body["document"]["greeting_message"]
         assert list(sections)[-1] == "summary"
         assert (
             sections["summary"]["blocks"][0]["paragraphs"][0]["text"]

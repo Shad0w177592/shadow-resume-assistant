@@ -10,6 +10,7 @@
     "resume_id": { "type": "string", "format": "uuid" },
     "template": { "enum": ["single_column", "technical_double_column"] },
     "page_target": { "enum": [1, 2] },
+    "greeting_message": { "type": "string", "maxLength": 400, "default": "" },
     "personal_info": {
       "type": "object",
       "additionalProperties": false,
