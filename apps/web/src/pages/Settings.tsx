@@ -111,7 +111,7 @@ export function SettingsPage() {
         </Card>
         <Card title="语音设备"><p>将在语音修改阶段显示麦克风权限和设备状态。文字输入始终可用。</p></Card>
         <Card title="本地数据"><p className="path-text">{dataDirectory}</p><p>可以改到 D 盘等任意可写位置。请选择一个空文件夹；切换前会自动备份并复制数据，旧目录继续保留为安全副本。</p><div className="actions"><Button disabled={dataOperation} onClick={changeDataDirectory}>更改保存位置</Button><Button disabled={dataOperation} onClick={createBackup}>导出全部备份</Button><Button disabled={dataOperation} className="secondary" onClick={restoreBackup}>从备份恢复</Button></div>{backupPath && <p className="path-text">最近备份：{backupPath}</p>}</Card>
-        <Card title="软件信息"><p>影子简历助手 0.1.9 · 本地优先桌面版</p></Card>
+        <Card title="软件信息"><p>影子简历助手 0.2.0 · 本地优先桌面版</p></Card>
         <Card title="危险操作"><p className="warning-text">清除个人资料、源文件、岗位、草稿和历史版本。此操作不可撤销。</p><TextInput label="输入“清除全部数据”确认" value={clearText} onChange={(event) => setClearText(event.target.value)} /><label className="check"><input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} />同时删除 API Key</label><Button className="danger" disabled={clearText !== "清除全部数据"} onClick={clearAll}>清除全部数据</Button></Card>
       </div>
     </main>
