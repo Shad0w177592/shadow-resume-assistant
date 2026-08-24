@@ -277,7 +277,8 @@ class ResumeWorkflowService:
             "与句数目标写作；原文较长时不得压缩成两句话。开头必须先写清人物身份或职业定位，"
             "例如作为经济学专业应届生，不得以面向某岗位、应聘某岗位或名词堆砌开头。"
             "全文按人物定位、具体经历证据、可迁移能力、能为岗位完成什么任务的顺序自然衔接，"
-            "使用至少 2 项具体经历证据；允许自然使用我，但不得反复使用我/本人，禁止空泛表达，包括能够胜任、"
+            "使用至少 2 项具体经历证据；允许自然使用我，但不得反复使用我/本人，"
+            "禁止空泛表达，包括能够胜任、"
             "快速适应、学习能力强、认真负责等空话，不照抄 JD。"
             "专业技能补充 1 至 2 条：标题必须是候选人可核实的具体工具或可迁移能力。"
             "技能之间必须是不同能力，不得同时返回 AI 信息搜集与 AI 工具应用等语义重叠项；"
@@ -287,7 +288,8 @@ class ResumeWorkflowService:
             "例如‘Excel 数据整理’‘SQL 数据查询’‘市场数据分析’；"
             "目标行业、品种、公司和岗位名称只能写在"
             "正文用途里，禁止写成黑色系数据研究能力这类行业包装标题。数据类技能必须明确写出"
-            "候选人使用的 Excel、SQL、Python、Power BI、Tableau、SPSS 等具体工具；正文写清工具或方法、岗位任务及"
+            "候选人使用的 Excel、SQL、Python、Power BI、Tableau、SPSS 等具体工具；"
+            "正文写清工具或方法、岗位任务及"
             "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
@@ -467,7 +469,8 @@ class ResumeWorkflowService:
                 topic = ResumeWorkflowService._skill_topic(heading, text)
                 if topic and topic in seen_topics:
                     issues.append(
-                        f"技能 {heading} 与 {seen_topics[topic]} 语义重复，应合并后改选另一项不同能力"
+                        f"技能 {heading} 与 {seen_topics[topic]} 语义重复，"
+                        "应合并后改选另一项不同能力"
                     )
                 elif topic:
                     seen_topics[topic] = heading
