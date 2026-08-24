@@ -8,6 +8,7 @@ import { WorkbenchPage } from "./Workbench";
 afterEach(() => {
   delete window.shadowDesktop;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test("workbench saves layout choices, generates, edits and saves a draft", async () => {
@@ -19,7 +20,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     ],
   };
   const profile = { id: "profile", display_name: "", personal_info: {}, entries: [{ id: "entry-1", section_key: "project", title: "影子项目", payload: { content: "完成工作流" }, importance: 5, created_at: "", updated_at: "" }] };
-  const draft = { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", section_key: "project", title: "项目经历", order: 0, column: "right", blocks: [{ block_id: "block-1", heading: "影子项目", meta: "", paragraphs: [{ paragraph_id: "p-1", text: "完成工作流", source_entry_ids: ["entry-1"] }] }] }, { section_id: "section-summary", section_key: "summary", title: "自我介绍", order: 1, column: "full", blocks: [{ block_id: "block-summary", heading: "", meta: "", paragraphs: [{ paragraph_id: "p-summary", text: "原来的自我介绍", source_entry_ids: [] }] }] }] } };
+  const draft = { id: "draft-1", job_target_id: "job-1", document: { personal_info: { name: "杨丰铭", headline: "", contacts: [] }, sections: [{ section_id: "section-1", section_key: "project", title: "项目经历", order: 0, column: "right", blocks: [{ block_id: "block-1", heading: "影子项目", meta: "完成工作流", paragraphs: [{ paragraph_id: "p-1", text: "完成工作流", source_entry_ids: ["entry-1"] }] }] }, { section_id: "section-summary", section_key: "summary", title: "自我介绍", order: 1, column: "full", blocks: [{ block_id: "block-summary", heading: "", meta: "", paragraphs: [{ paragraph_id: "p-summary", text: "原来的自我介绍", source_entry_ids: [] }] }] }] } };
   const savedVersion = { id: "version-1", name: "版本 1", notes: null, created_at: "2026-08-22T12:00:00Z", snapshot: { document: draft.document, config } };
   let exportAttempts = 0;
   const request = vi.fn(async (path: string, method = "GET", body?: unknown) => {
@@ -52,6 +53,14 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
     transcribeAudio: async () => ({ text: "" }),
     request: request as unknown as <T>(path: string, method?: string, body?: unknown) => Promise<T>,
   };
+  const resizeObserve = vi.fn();
+  class TestResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {}
+    observe = resizeObserve;
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal("ResizeObserver", TestResizeObserver);
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={["/workbench/job-1"]}><NotificationProvider><Routes><Route path="/workbench/:jobId" element={<WorkbenchPage />} /></Routes></NotificationProvider></MemoryRouter>);
   expect(await screen.findByText("栏目与取舍")).toBeInTheDocument();
@@ -81,12 +90,18 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await user.click(screen.getByRole("button", { name: "按所选栏目生成" }));
   const projectEditor = await screen.findByDisplayValue("完成工作流");
   expect(projectEditor).toHaveClass("expanded");
+  expect(projectEditor).toHaveAttribute("rows", "1");
+  expect(resizeObserve).toHaveBeenCalled();
+  expect(document.querySelector(".resume-section small")).toBeNull();
   expect(screen.getByRole("button", { name: "收起段落" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "收起段落" }));
   expect(projectEditor).toHaveClass("compact");
   expect(screen.getByRole("button", { name: "展开段落" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "展开段落" }));
   expect(projectEditor).toHaveClass("expanded");
+  expect(projectEditor).toHaveAttribute("rows", "1");
+  expect(resizeObserve).toHaveBeenCalled();
+  expect(document.querySelector(".resume-section small")).toBeNull();
   expect(await screen.findByText("简历已生成，请核实 AI 补充内容")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "取消提醒并保留简历" }));
   expect(screen.queryByText("简历已生成，请核实 AI 补充内容")).not.toBeInTheDocument();

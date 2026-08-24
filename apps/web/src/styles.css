@@ -406,3 +406,11 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
   .workbench.right-panel-collapsed { --workbench-right-width: 48px; }
   .workbench-toolbar { grid-template-columns: var(--workbench-left-width) minmax(470px, 1fr) var(--workbench-right-width); }
 }
+
+/* Resume paragraphs must grow after canvas width changes. */
+.resume-section textarea.expanded {
+  field-sizing: content;
+  height: auto;
+  overflow-y: hidden;
+  white-space: pre-wrap;
+}

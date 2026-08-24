@@ -95,3 +95,45 @@ def test_summary_quality_accepts_identity_and_experience_narrative() -> None:
 
     assert not any("人物定位" in issue for issue in issues)
     assert not any("具体经历" in issue for issue in issues)
+
+
+def test_imported_skill_body_is_not_duplicated_as_meta() -> None:
+    config = {
+        "template": "single_column",
+        "page_target": 1,
+        "rewrite_sections": [],
+        "sections": [
+            {
+                "section_key": "summary",
+                "title": "自我介绍",
+                "enabled": True,
+                "order": 1,
+                "column": "full",
+            },
+            {
+                "section_key": "skills",
+                "title": "专业技能",
+                "enabled": True,
+                "order": 0,
+                "column": "full",
+            },
+        ],
+    }
+    document = ResumeWorkflowService._build_document(
+        config,
+        {},
+        [
+            {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "section_key": "skills",
+                "title": "AI 工具应用",
+                "payload": {
+                    "content": "AI 工具应用：熟练使用 ChatGPT、DeepSeek 辅助资料整理。",
+                    "source": {"document_id": "source-1", "block_ids": ["p-1"]},
+                },
+            }
+        ],
+    )
+
+    skill = next(section for section in document.sections if section.section_key == "skills")
+    assert skill.blocks[0].meta == ""

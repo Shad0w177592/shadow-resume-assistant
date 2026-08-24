@@ -11,21 +11,41 @@ type ResumeConfig = { template: "single_column" | "technical_double_column"; pag
 type EditProposal = { id: string; target_block_id: string; before_text: string; after_text: string; status: string; payload: { instruction: string; reason: string; evidence_ids: string[]; save_scope: string; contains_new_fact: boolean } };
 type ResumeVersion = { id: string; name: string; notes: string | null; created_at: string; snapshot: { document: ResumeDraft["document"]; config: ResumeConfig } };
 type GeneratedResumeDraft = ResumeDraft & { fact_warnings?: string[] };
+function normalizeResumeText(value: string) {
+  return value.toLowerCase().replace(/[^0-9a-z\u4e00-\u9fff]+/g, "");
+}
+
+function shouldShowBlockMeta(meta: string, paragraphTexts: string[]) {
+  const normalizedMeta = normalizeResumeText(meta);
+  if (!normalizedMeta) return false;
+  return !paragraphTexts.some((text) => {
+    const normalizedText = normalizeResumeText(text);
+    return normalizedText.includes(normalizedMeta) || normalizedMeta.includes(normalizedText);
+  });
+}
+
 function ResumeParagraphEditor({ label, text, expanded, selected, onFocus, onChange }: { label: string; text: string; expanded: boolean; selected: boolean; onFocus: () => void; onChange: (value: string) => void }) {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
   useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
-    if (!expanded) {
-      editor.style.height = "";
-      return;
-    }
-    editor.style.height = "0px";
-    editor.style.height = `${editor.scrollHeight}px`;
+    const resize = () => {
+      if (!expanded) {
+        editor.style.height = "";
+        return;
+      }
+      editor.style.height = "0px";
+      editor.style.height = `${editor.scrollHeight}px`;
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined" || !editor.parentElement) return;
+    const observer = new ResizeObserver(resize);
+    observer.observe(editor.parentElement);
+    return () => observer.disconnect();
   }, [expanded, text]);
 
-  return <textarea ref={editorRef} aria-label={label} className={`${expanded ? "expanded" : "compact"}${selected ? " selected" : ""}`} value={text} onFocus={onFocus} onChange={(event) => onChange(event.target.value)} />;
+  return <textarea rows={1} ref={editorRef} aria-label={label} className={`${expanded ? "expanded" : "compact"}${selected ? " selected" : ""}`} value={text} onFocus={onFocus} onChange={(event) => onChange(event.target.value)} />;
 }
 
 export function WorkbenchPage() {
@@ -251,7 +271,7 @@ export function WorkbenchPage() {
         </div>
       </header>
       <aside className="workbench-left"><div className="panel-heading"><h2>栏目与取舍</h2><button type="button" className="panel-toggle" aria-label={leftPanelCollapsed ? "展开栏目与取舍" : "收起栏目与取舍"} onClick={() => setLeftPanelCollapsed((value) => !value)}>{leftPanelCollapsed ? "展开" : "收起"}</button></div><div className="panel-content"><p>拖动栏目可调整顺序；条数留空表示不限。</p>{ordered.map((section) => <article key={section.section_key} draggable onDragStart={() => { dragKey.current = section.section_key; }} onDragOver={(event) => event.preventDefault()} onDrop={() => dropSection(section.section_key)}><label className="check"><input type="checkbox" checked={section.enabled} onChange={(event) => updateSection(section.section_key, { enabled: event.target.checked })} />{section.title}</label><label className="field"><span>最多使用</span><input aria-label={`${section.title}最多使用`} type="number" min={1} max={20} placeholder="不限" value={section.max_entries ?? ""} onChange={(event) => updateSection(section.section_key, { max_entries: event.target.value ? Number(event.target.value) : null })} /></label>{config.template === "technical_double_column" && <select aria-label={`${section.title}栏位`} value={section.column} onChange={(event) => updateSection(section.section_key, { column: event.target.value as SectionConfig["column"] })}><option value="left">左栏</option><option value="right">右栏</option></select>}</article>)}<h3>经历取舍</h3>{profile.entries.map((entry) => <label className="entry-mode" key={entry.id}><span>{entry.title || "未命名经历"} · {entry.importance || 3}/5</span><select value={config.entry_modes[entry.id] || "ai_decide"} onChange={(event) => patchConfig({ entry_modes: { ...config.entry_modes, [entry.id]: event.target.value as ResumeConfig["entry_modes"][string] } })}><option value="ai_decide">AI 决定</option><option value="must_include">必须使用</option><option value="exclude_this_resume">不要用于这一份简历</option></select></label>)}</div></aside>
-      <section className="workbench-canvas">{!draft ? <Card><EmptyState title="尚未生成草稿" description="完成左侧配置后生成简历。" /></Card> : <article className={`resume-preview ${config.template}`}><header><h1>{draft.document.personal_info.name || "姓名"}</h1><p>{draft.document.personal_info.contacts.join(" · ")}</p></header>{draft.document.sections.map((section) => <section className={`resume-section ${section.column || "full"}`} key={section.section_id}><h2>{section.title}</h2>{section.blocks.map((block) => <div key={block.block_id}><strong>{block.heading}</strong><small>{block.meta}</small>{block.paragraphs.map((paragraph) => <ResumeParagraphEditor key={paragraph.paragraph_id} label={`编辑${block.heading || section.title}`} text={paragraph.text} expanded={paragraphsExpanded} selected={selectedParagraph === paragraph.paragraph_id} onFocus={() => setSelectedParagraph(paragraph.paragraph_id)} onChange={(value) => editParagraph(paragraph.paragraph_id, value)} />)}</div>)}</section>)}</article>}</section>
+      <section className="workbench-canvas">{!draft ? <Card><EmptyState title="尚未生成草稿" description="完成左侧配置后生成简历。" /></Card> : <article className={`resume-preview ${config.template}`}><header><h1>{draft.document.personal_info.name || "姓名"}</h1><p>{draft.document.personal_info.contacts.join(" · ")}</p></header>{draft.document.sections.map((section) => <section className={`resume-section ${section.column || "full"}`} key={section.section_id}><h2>{section.title}</h2>{section.blocks.map((block) => <div key={block.block_id}><strong>{block.heading}</strong>{shouldShowBlockMeta(block.meta, block.paragraphs.map((paragraph) => paragraph.text)) && <small>{block.meta}</small>}{block.paragraphs.map((paragraph) => <ResumeParagraphEditor key={paragraph.paragraph_id} label={`编辑${block.heading || section.title}`} text={paragraph.text} expanded={paragraphsExpanded} selected={selectedParagraph === paragraph.paragraph_id} onFocus={() => setSelectedParagraph(paragraph.paragraph_id)} onChange={(value) => editParagraph(paragraph.paragraph_id, value)} />)}</div>)}</section>)}</article>}</section>
       <aside className="workbench-right"><div className="panel-heading"><h2>{showVersions ? "历史版本" : "AI 修改助手"}</h2><button type="button" className="panel-toggle" aria-label={rightPanelCollapsed ? "展开 AI 修改助手" : "收起 AI 修改助手"} onClick={() => setRightPanelCollapsed((value) => !value)}>{rightPanelCollapsed ? "展开" : "收起"}</button></div><div className="panel-content">{showVersions ? <div className="version-list">{versions.length === 0 ? <p>还没有主动保存的版本。</p> : versions.map((version) => <article key={version.id}><strong>{version.name}</strong><small>{new Date(version.created_at).toLocaleString()}</small>{version.notes && <p>{version.notes}</p>}<div className="actions"><Button className="ghost" onClick={() => editVersionMeta(version)}>改名/备注</Button><Button className="ghost" onClick={() => compareVersion(version)}>对比</Button><Button className="ghost" onClick={() => setRestoreTarget(version)}>恢复</Button><Button className="ghost" onClick={() => exportVersion(version)}>导出</Button><Button className="danger" onClick={() => deleteVersion(version)}>删除</Button></div></article>)}{comparison && <p>对比结果：{comparison.length ? `${comparison.length} 个内容块发生变化` : "没有变化"}</p>}</div> : <>{selectedParagraph ? <p className="selection-ready">已选择一个段落</p> : <p>先在画布中选择一段内容。</p>}<label className="field"><span>修改要求</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="例如：写得更简洁，降低夸张程度" /></label><div className="actions"><Button className="secondary" onClick={recording ? stopRecording : startRecording}>{recording ? "停止录音" : "语音输入"}</Button><Button onClick={proposeEdit}>生成修改</Button></div><label className="field"><span>接受后保存到</span><select value={saveScope} onChange={(event) => setSaveScope(event.target.value)}><option value="current_resume">只用于当前简历</option><option value="also_profile">同时保存到个人资料库</option></select></label>{proposal && <Card title="修改前后对比"><div className="proposal-before"><small>修改前</small><p>{proposal.before_text}</p></div><div className="proposal-after"><small>修改后</small><p>{proposal.after_text}</p></div><p><strong>理由：</strong>{proposal.payload.reason}</p><p><strong>证据：</strong>{proposal.payload.evidence_ids.join("、")}</p>{proposal.status === "pending" ? <div className="actions"><Button onClick={() => decide("accept")}>接受</Button><Button className="danger" onClick={() => decide("reject")}>拒绝</Button><Button className="ghost" onClick={proposeEdit}>重新生成</Button></div> : <p className="save-state">已{proposal.status === "accepted" ? "接受" : "拒绝"}</p>}</Card>}</>}</div></aside>
       <Dialog open={pendingExportBlocked} title="导出前需要处理 AI 修改" onClose={() => setPendingExportBlocked(false)}><p>发现尚未接受或拒绝的 AI 修改。对应的修改前后对比已经显示在右侧，请先选择“接受”或“拒绝”，再重新导出。</p><div className="actions"><Button onClick={() => { setPendingExportBlocked(false); setShowVersions(false); setRightPanelCollapsed(false); }}>查看并处理</Button><Button className="ghost" onClick={() => setPendingExportBlocked(false)}>取消导出</Button></div></Dialog>
       <Dialog open={showGenerateOptions} title="选择需要 AI 修改的栏目" onClose={() => setShowGenerateOptions(false)}><p>只勾选希望 AI 润色或重新排序的栏目。未勾选栏目会保留原有文字和条目顺序。</p><div className="polish-options">{ordered.filter((section) => section.enabled).map((section) => <label key={section.section_key}><input type="checkbox" checked={config.rewrite_sections.includes(section.section_key)} onChange={() => toggleRewriteSection(section.section_key)} />{section.title}<small>{config.rewrite_sections.includes(section.section_key) ? "AI 可以改写内容，并按岗位相关性调整本栏目条目顺序。" : "保持原有内容和条目顺序。"}</small></label>)}</div><div className="actions"><Button disabled={busy} onClick={runGenerate}>{busy ? "生成中…" : "按所选栏目生成"}</Button><Button className="ghost" disabled={busy} onClick={() => setShowGenerateOptions(false)}>取消</Button></div></Dialog>

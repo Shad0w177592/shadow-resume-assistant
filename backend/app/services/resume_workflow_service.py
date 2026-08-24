@@ -364,6 +364,7 @@ class ResumeWorkflowService:
                 for block in skills_section.blocks
                 for paragraph in block.paragraphs
             }
+            remaining_blocks = list(skills_section.blocks)
             added_blocks = []
             added_headings = []
             added_topics: set[str] = set()
@@ -373,8 +374,32 @@ class ResumeWorkflowService:
                 topic = self._skill_topic(heading, text)
                 if topic and topic in added_topics:
                     continue
-                if not heading or not text or f"{heading}\n{text}" in existing:
+                matching_blocks = [
+                    block
+                    for block in remaining_blocks
+                    if topic
+                    and self._skill_topic(
+                        block.heading,
+                        " ".join(paragraph.text for paragraph in block.paragraphs),
+                    )
+                    == topic
+                ]
+                if not heading or not text:
                     continue
+                if not matching_blocks and f"{heading}\n{text}" in existing:
+                    continue
+                source_ids = list(
+                    dict.fromkeys(
+                        str(source_id)
+                        for block in matching_blocks
+                        for paragraph in block.paragraphs
+                        for source_id in paragraph.source_entry_ids
+                    )
+                )
+                if matching_blocks:
+                    remaining_blocks = [
+                        block for block in remaining_blocks if block not in matching_blocks
+                    ]
                 if topic:
                     added_topics.add(topic)
                 added_headings.append(heading)
@@ -382,11 +407,12 @@ class ResumeWorkflowService:
                     ResumeBlock(
                         block_id=str(uuid4()),
                         heading=heading,
+                        meta="",
                         paragraphs=[
                             ResumeParagraph(
                                 paragraph_id=str(uuid4()),
                                 text=text,
-                                source_entry_ids=[],
+                                source_entry_ids=source_ids,
                                 risk_flags=["ai_added_skill"],
                             )
                         ],
@@ -396,7 +422,9 @@ class ResumeWorkflowService:
                 raise AIProviderError(
                     "invalid_output", "AI 返回的岗位专业技能与原内容重复，未保存本次结果"
                 )
-            skills_section.blocks = added_blocks + skills_section.blocks
+            skills_section.blocks = self._deduplicate_skill_blocks(
+                added_blocks + remaining_blocks
+            )
             warnings.append(
                 f"AI 为目标岗位补充了专业技能：{'、'.join(added_headings)}。"
                 "这些是 AI 根据岗位要求起草的内容，请确认自己确实掌握后再投递"
@@ -489,6 +517,30 @@ class ResumeWorkflowService:
                 if len(text) < 30 or text.startswith(("可基于", "能够持续")):
                     issues.append(f"技能“{heading or '未命名'}”缺少方法、岗位任务或交付物")
         return issues
+
+    @classmethod
+    def _deduplicate_skill_blocks(cls, blocks: list[ResumeBlock]) -> list[ResumeBlock]:
+        result: list[ResumeBlock] = []
+        by_topic: dict[str, ResumeBlock] = {}
+        for block in blocks:
+            topic = cls._skill_topic(
+                block.heading, " ".join(paragraph.text for paragraph in block.paragraphs)
+            )
+            if not topic or topic not in by_topic:
+                result.append(block)
+                if topic:
+                    by_topic[topic] = block
+                continue
+            target = by_topic[topic]
+            existing_texts = {paragraph.text.strip() for paragraph in target.paragraphs}
+            target.paragraphs.extend(
+                paragraph
+                for paragraph in block.paragraphs
+                if paragraph.text.strip() not in existing_texts
+            )
+            target.meta = ""
+        return result
+
 
     @staticmethod
     def _skill_topic(heading: str, text: str) -> str:
@@ -742,10 +794,16 @@ class ResumeWorkflowService:
                     )
                 )
                 meta = (
-                    content.splitlines()[0].strip()
-                    if source and content
-                    else " · ".join(
-                        str(payload[key]) for key in ("organization", "time") if payload.get(key)
+                    ""
+                    if section_key == "skills"
+                    else (
+                        content.splitlines()[0].strip()
+                        if source and content
+                        else " · ".join(
+                            str(payload[key])
+                            for key in ("organization", "time")
+                            if payload.get(key)
+                        )
                     )
                 )
                 blocks.append(
