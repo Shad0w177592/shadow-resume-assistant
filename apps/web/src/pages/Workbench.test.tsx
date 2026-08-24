@@ -49,6 +49,8 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={["/workbench/job-1"]}><NotificationProvider><Routes><Route path="/workbench/:jobId" element={<WorkbenchPage />} /></Routes></NotificationProvider></MemoryRouter>);
   expect(await screen.findByText("栏目与取舍")).toBeInTheDocument();
+  expect(document.querySelector(".workbench-toolbar-actions")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "生成修改" })).toBeInTheDocument();
   await user.type(screen.getByLabelText("项目经历最多使用"), "2");
   await user.selectOptions(screen.getByLabelText("模板"), "technical_double_column");
   await user.selectOptions(screen.getByLabelText("页数"), "2");
@@ -114,7 +116,7 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/versions/version-1/restore", "POST", undefined));
   await user.click(screen.getByRole("button", { name: "历史版本" }));
   await user.type(screen.getByLabelText("修改要求"), "写得更简洁");
-  await user.click(screen.getByRole("button", { name: "生成修改建议" }));
+  await user.click(screen.getByRole("button", { name: "生成修改" }));
   expect(await screen.findByText("修改前后对比")).toBeInTheDocument();
   expect(screen.getByText("删除重复表达")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "拒绝" }));

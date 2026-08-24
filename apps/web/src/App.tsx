@@ -46,7 +46,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span aria-hidden="true">■</span> 影子简历助手</div>
+        <div className="brand"><span className="brand-mark" aria-hidden="true">影</span><span className="brand-copy">影子简历助手<small>LOCAL RESUME DESK</small></span></div>
         <nav aria-label="主导航">
           {pages.map(([to, label]) => (
             <NavLink key={to} to={to} end={to === "/"}>
@@ -54,7 +54,7 @@ export function App() {
             </NavLink>
           ))}
         </nav>
-        <p className="local-note">数据仅保存在这台电脑</p>
+        <p className="local-note"><span aria-hidden="true">▣</span> 数据仅保存在这台电脑</p>
       </aside>
       <Routes>
         <Route path="/" element={<HomePage />} />
