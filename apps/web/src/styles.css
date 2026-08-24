@@ -380,14 +380,18 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
 .panel-toggle:hover { background: var(--rose-soft); }
 .workbench-left .panel-content > p, .workbench-right .panel-content > p { color: var(--muted); font-size: 12px; }
 .workbench-left .panel-content > article {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 9px;
   padding: 13px 2px; margin: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
 }
 .workbench-left .panel-content > article:hover { background: #f3e6d8; }
 .workbench-left .check { min-width: 0; white-space: nowrap; }
 .workbench-left .check input { flex: 0 0 auto; }
-.workbench-left .field { display: grid; grid-template-columns: auto 58px; gap: 5px; margin: 0; white-space: nowrap; }
-.workbench-left .field input { width: 58px; min-width: 0; }
+.workbench-left .section-limit {
+  display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 10px;
+  margin: 0 0 0 27px; white-space: nowrap;
+}
+.workbench-left .section-limit span { font-size: 11px; color: var(--muted); }
+.workbench-left .section-limit input { width: 76px; min-width: 76px; text-align: center; }
 .workbench.left-panel-collapsed .workbench-left,
 .workbench.right-panel-collapsed .workbench-right { padding: 12px 5px; overflow: hidden; }
 .workbench.left-panel-collapsed .workbench-left .panel-content,
