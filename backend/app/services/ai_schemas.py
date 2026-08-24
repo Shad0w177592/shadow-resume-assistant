@@ -52,7 +52,7 @@ RESUME_TAILOR_SCHEMA = {
         "summary": {"type": "string"},
         "skills": {
             "type": "array",
-            "maxItems": 2,
+            "maxItems": 20,
             "items": {
                 "type": "object",
                 "additionalProperties": False,

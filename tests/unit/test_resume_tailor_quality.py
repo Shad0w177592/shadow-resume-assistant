@@ -17,7 +17,9 @@ def test_skill_quality_rejects_semantically_duplicate_ai_skills() -> None:
     }
 
     issues = ResumeWorkflowService._tailor_quality_issues(
-        result, {"skills"}, {"character_min": 0, "character_max": 999, "sentence_target": 0}
+        result,
+        {"skills"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 0},
     )
 
     assert any("语义重复" in issue for issue in issues)
@@ -35,7 +37,9 @@ def test_data_skill_quality_requires_concrete_tools() -> None:
     }
 
     issues = ResumeWorkflowService._tailor_quality_issues(
-        result, {"skills"}, {"character_min": 0, "character_max": 999, "sentence_target": 0}
+        result,
+        {"skills"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 0},
     )
 
     assert any("Excel、SQL" in issue for issue in issues)
@@ -53,10 +57,13 @@ def test_data_skill_with_excel_and_sql_passes_tool_check() -> None:
     }
 
     issues = ResumeWorkflowService._tailor_quality_issues(
-        result, {"skills"}, {"character_min": 0, "character_max": 999, "sentence_target": 0}
+        result,
+        {"skills"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 0},
     )
 
     assert not any("没有写明" in issue for issue in issues)
+
 
 def test_summary_quality_rejects_job_first_fragmented_opening() -> None:
     result = {
@@ -135,5 +142,130 @@ def test_imported_skill_body_is_not_duplicated_as_meta() -> None:
         ],
     )
 
-    skill = next(section for section in document.sections if section.section_key == "skills")
+    skill = next(
+        section for section in document.sections if section.section_key == "skills"
+    )
     assert skill.blocks[0].meta == ""
+
+
+def test_summary_quality_rejects_company_repetition_and_metric_dumping() -> None:
+    result = {
+        "summary": (
+            "作为经济学专业应届生，具备数据分析和内容运营基础。"
+            "在杭州音速文化创意有限公司实习期间，累计签约30人，月均招募10人；"
+            "自媒体视频最高播放量23万，并连续直播3个月，可用于电商内容运营。"
+        ),
+        "skills": [],
+    }
+
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        result,
+        {"summary"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 3},
+    )
+
+    assert any("公司全称" in issue for issue in issues)
+    assert any("过多职责数字" in issue for issue in issues)
+
+
+def test_summary_quality_requires_clear_target_job_value() -> None:
+    result = {
+        "summary": (
+            "作为经济学专业应届生，学习中形成了数据敏感度和结构化分析习惯。"
+            "内容运营实习中积累了用户沟通和任务推进经验。"
+        ),
+        "skills": [],
+    }
+
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        result,
+        {"summary"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 2},
+    )
+
+    assert any("能为目标岗位完成什么" in issue for issue in issues)
+
+
+def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
+    class Provider:
+        request = None
+
+        def complete_json(self, **request):
+            self.request = request
+            return {
+                "summary": "",
+                "skills": [
+                    {
+                        "heading": "AI 工具应用",
+                        "text": "使用 ChatGPT、DeepSeek 和 Codex 整理公开资料、归纳需求并辅助形成电商运营方案。",
+                        "reason": "对应岗位的信息整理任务",
+                    },
+                    {
+                        "heading": "Excel 数据分析",
+                        "text": "使用 Excel 整理销售和活动数据，按渠道与周期复盘变化并输出可检查的运营结论。",
+                        "reason": "对应岗位的数据复盘任务",
+                    },
+                    {
+                        "heading": "文档与方案写作",
+                        "text": "使用 Word 和 PPT 梳理活动思路、执行步骤与复盘结果，形成便于协作的方案材料。",
+                        "reason": "对应岗位的方案交付任务",
+                    },
+                ],
+            }
+
+    config = {
+        "template": "single_column",
+        "page_target": 1,
+        "strategies": ["concise"],
+        "rewrite_sections": ["skills"],
+        "sections": [
+            {
+                "section_key": "summary",
+                "title": "自我介绍",
+                "enabled": False,
+                "order": 1,
+                "column": "full",
+                "max_entries": None,
+            },
+            {
+                "section_key": "skills",
+                "title": "专业技能",
+                "enabled": True,
+                "order": 0,
+                "column": "full",
+                "max_entries": 3,
+            },
+        ],
+    }
+    entries = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "section_key": "skills",
+            "title": "AI 工具",
+            "payload": {"content": "会使用 ChatGPT、DeepSeek 和 Codex"},
+        }
+    ]
+    document = ResumeWorkflowService._build_document(config, {}, entries)
+    provider = Provider()
+    service = ResumeWorkflowService(None, provider)
+
+    service._tailor_summary_and_skills(
+        document,
+        entries,
+        [],
+        {
+            "title": "电商运营",
+            "company": "目标公司",
+            "jd_text": "负责数据复盘和活动方案",
+        },
+        config,
+        "",
+    )
+
+    skills = next(
+        section for section in document.sections if section.section_key == "skills"
+    )
+    assert len(skills.blocks) == 3
+    assert provider.request["payload"]["skill_count_target"] == 3
+    assert "定位—证据—迁移—价值" in provider.request["instructions"]
+    assert "严格遵守 payload.skill_count_target" in provider.request["instructions"]

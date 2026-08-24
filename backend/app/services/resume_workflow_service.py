@@ -250,6 +250,10 @@ class ResumeWorkflowService:
         if not rewrite_sections.intersection({"summary", "skills"}):
             return []
         summary_style_target = self._summary_style_target(original_summary)
+        skills_setting = next(
+            item for item in config["sections"] if item["section_key"] == "skills"
+        )
+        skill_count_target = skills_setting.get("max_entries")
         tailor_payload = {
             "target_job": {
                 "company": job.get("company"),
@@ -261,6 +265,7 @@ class ResumeWorkflowService:
             "modify_skills": "skills" in rewrite_sections,
             "original_summary": original_summary,
             "summary_style_target": summary_style_target,
+            "skill_count_target": skill_count_target,
             "evidence": [
                 {
                     "section_key": entry["section_key"],
@@ -276,11 +281,16 @@ class ResumeWorkflowService:
             "自我介绍必须保持原文的篇幅和信息密度，严格按 payload.summary_style_target 的字符范围"
             "与句数目标写作；原文较长时不得压缩成两句话。开头必须先写清人物身份或职业定位，"
             "例如作为经济学专业应届生，不得以面向某岗位、应聘某岗位或名词堆砌开头。"
-            "全文按人物定位、具体经历证据、可迁移能力、能为岗位完成什么任务的顺序自然衔接，"
-            "使用至少 2 项具体经历证据；允许自然使用我，但不得反复使用我/本人，"
-            "禁止空泛表达，包括能够胜任、"
-            "快速适应、学习能力强、认真负责等空话，不照抄 JD。"
-            "专业技能补充 1 至 2 条：标题必须是候选人可核实的具体工具或可迁移能力。"
+            "自我介绍不是工作经历复述，也不是按时间罗列做过什么。统一采用‘定位—证据—迁移—价值’写法："
+            "先写候选人的身份和与岗位最相关的 2 至 3 项特质；"
+            "再只选 1 至 2 段最能证明这些特质的经历，"
+            "用‘内容运营实习中’‘自媒体实践中’等类别简称，不重复上方已经出现的公司全称；"
+            "经历只作为能力证据，不复述完整职责、流程和所有业绩数字；每项证据后必须明确说明该能力"
+            "可以用于目标岗位的哪项任务、交付物或业务结果。核心篇幅应回答‘我有什么特质，以及这些特质"
+            "能为这份工作做什么’，而不是回答‘我过去做过什么’。允许自然使用我，但不得反复使用我/本人；"
+            "禁止空泛表达，包括能够胜任、快速适应、学习能力强、认真负责等空话，不照抄 JD。"
+            "专业技能数量必须严格遵守 payload.skill_count_target；该值为 null 时返回 2 至 3 条。"
+            "标题必须是候选人可核实的具体工具或可迁移能力。"
             "技能之间必须是不同能力，不得同时返回 AI 信息搜集与 AI 工具应用等语义重叠项；"
             "应合并为一条 AI 工具应用，再优先从证据中选择 Office/PPT/Excel、文档写作、"
             "视频剪辑等另一项不同能力。"
@@ -300,7 +310,9 @@ class ResumeWorkflowService:
             payload=tailor_payload,
             schema=RESUME_TAILOR_SCHEMA,
         )
-        quality_issues = self._tailor_quality_issues(result, rewrite_sections, summary_style_target)
+        quality_issues = self._tailor_quality_issues(
+            result, rewrite_sections, summary_style_target, skill_count_target
+        )
         if quality_issues:
             try:
                 retry_result = self.provider.complete_json(
@@ -317,7 +329,7 @@ class ResumeWorkflowService:
                     schema=RESUME_TAILOR_SCHEMA,
                 )
                 retry_issues = self._tailor_quality_issues(
-                    retry_result, rewrite_sections, summary_style_target
+                    retry_result, rewrite_sections, summary_style_target, skill_count_target
                 )
                 if len(retry_issues) <= len(quality_issues):
                     result = retry_result
@@ -336,7 +348,11 @@ class ResumeWorkflowService:
                 raise AIProviderError("invalid_output", "自我介绍栏目缺失，未保存本次结果")
             summary_section.blocks[0].paragraphs[0].text = summary
         if "skills" in rewrite_sections:
-            additions = result["skills"][:2]
+            additions = (
+                result["skills"][:skill_count_target]
+                if skill_count_target is not None
+                else result["skills"][:3]
+            )
             if not additions:
                 raise AIProviderError("invalid_output", "AI 没有返回岗位专业技能，未保存本次结果")
             skills_section = next(
@@ -420,7 +436,10 @@ class ResumeWorkflowService:
                 raise AIProviderError(
                     "invalid_output", "AI 返回的岗位专业技能与原内容重复，未保存本次结果"
                 )
-            skills_section.blocks = self._deduplicate_skill_blocks(added_blocks + remaining_blocks)
+            merged_skill_blocks = self._deduplicate_skill_blocks(added_blocks + remaining_blocks)
+            if skill_count_target is not None:
+                merged_skill_blocks = merged_skill_blocks[:skill_count_target]
+            skills_section.blocks = merged_skill_blocks
             warnings.append(
                 f"AI 为目标岗位补充了专业技能：{'、'.join(added_headings)}。"
                 "这些是 AI 根据岗位要求起草的内容，请确认自己确实掌握后再投递"
@@ -448,6 +467,7 @@ class ResumeWorkflowService:
         result: dict[str, Any],
         rewrite_sections: set[str],
         summary_style_target: dict[str, int],
+        skill_count_target: int | None = None,
     ) -> list[str]:
         issues = []
         if "summary" in rewrite_sections:
@@ -476,7 +496,17 @@ class ResumeWorkflowService:
             banned = ("能够胜任", "快速适应", "学习能力强", "认真负责")
             if any(value in summary for value in banned):
                 issues.append("自我介绍包含空泛评价，应改为证据和岗位任务")
+            if re.search(r"有限公司|有限责任公司|股份有限公司|集团有限公司", summary):
+                issues.append("自我介绍重复了经历栏中的公司全称，应使用经历类别简称")
+            if len(re.findall(r"\d+(?:\.\d+)?%?", summary)) >= 3:
+                issues.append("自我介绍堆砌了过多职责数字，应只保留能证明岗位能力的关键证据")
+            value_bridge = r"可(?:迁移|用于)|有助于|支持|帮助|应用于|为.{0,20}(?:提供|完成|提升)"
+            if summary and not re.search(value_bridge, summary):
+                issues.append("自我介绍没有说明已有能力能为目标岗位完成什么")
         if "skills" in rewrite_sections:
+            skills = result.get("skills") or []
+            if skill_count_target is not None and len(skills) != skill_count_target:
+                issues.append(f"专业技能应返回 {skill_count_target} 条，当前返回 {len(skills)} 条")
             generic_headings = {
                 "沟通能力",
                 "团队协作",
@@ -487,7 +517,7 @@ class ResumeWorkflowService:
                 "沟通跟进与协同推进",
             }
             seen_topics: dict[str, str] = {}
-            for skill in result.get("skills") or []:
+            for skill in skills:
                 heading = str(skill.get("heading") or "").strip()
                 text = str(skill.get("text") or "").strip()
                 topic = ResumeWorkflowService._skill_topic(heading, text)
