@@ -135,8 +135,10 @@ h1 { margin: 0; color: var(--navy); font-size: 34px; }
 .resume-section.left { grid-column: 1; }
 .resume-section.right { grid-column: 2; }
 .resume-section.full { grid-column: 1 / -1; }
-.resume-section textarea { width: 100%; min-height: 60px; border: 1px solid transparent; resize: vertical; background: transparent; line-height: 1.5; }
-.resume-section textarea:hover, .resume-section textarea.selected { border-color: #9bc2e6; background: #f8fbff; }
+.resume-section textarea { width: 100%; border: 1px solid transparent; background: transparent; line-height: 1.5; }
+.resume-section textarea.expanded { min-height: 0; overflow: hidden; resize: none; padding: 2px 0; }
+.resume-section textarea.compact { height: 64px; min-height: 64px; max-height: 64px; overflow: auto; resize: none; border-color: #d7dee8; border-radius: 6px; padding: 7px 9px; }
+.resume-section textarea.compact:hover, .resume-section textarea.selected { border-color: #9bc2e6; background: #f8fbff; }
 .selection-ready { color: #067647; background: #ecfdf3; border-radius: 8px; padding: 10px; }
 .workbench-right .field { margin: 14px 0; }
 .workbench-right .actions { flex-wrap: wrap; }

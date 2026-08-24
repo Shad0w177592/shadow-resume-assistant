@@ -59,7 +59,14 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(await screen.findByText("选择需要 AI 修改的栏目")).toBeInTheDocument();
   expect(screen.getByText(/未勾选栏目会保留原有文字和条目顺序/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "按所选栏目生成" }));
-  expect(await screen.findByDisplayValue("完成工作流")).toBeInTheDocument();
+  const projectEditor = await screen.findByDisplayValue("完成工作流");
+  expect(projectEditor).toHaveClass("expanded");
+  expect(screen.getByRole("button", { name: "收起段落" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "收起段落" }));
+  expect(projectEditor).toHaveClass("compact");
+  expect(screen.getByRole("button", { name: "展开段落" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "展开段落" }));
+  expect(projectEditor).toHaveClass("expanded");
   expect(await screen.findByText("简历已生成，请核实 AI 补充内容")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "取消提醒并保留简历" }));
   expect(screen.queryByText("简历已生成，请核实 AI 补充内容")).not.toBeInTheDocument();
