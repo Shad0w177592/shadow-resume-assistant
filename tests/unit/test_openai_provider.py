@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from openai import OpenAI
+from openai import APITimeoutError, OpenAI
 
 from app.security.credentials import InMemoryCredentialStore
 from app.services.openai_provider import AIProviderError, OpenAITextProvider
@@ -30,7 +30,9 @@ class SettingsDatabase:
         }
 
 
-def test_provider_uses_stateless_strict_structured_output_without_pii_metadata() -> None:
+def test_provider_uses_stateless_strict_structured_output_without_pii_metadata() -> (
+    None
+):
     captured = {}
 
     class Client:
@@ -55,7 +57,10 @@ def test_provider_uses_stateless_strict_structured_output_without_pii_metadata()
     assert request["store"] is False
     assert request["text"]["format"]["strict"] is True
     assert request["text"]["format"]["schema"] == SCHEMA
-    assert request["metadata"] == {"workflow": "test_workflow", "prompt_version": "1.0.0"}
+    assert request["metadata"] == {
+        "workflow": "test_workflow",
+        "prompt_version": "1.0.0",
+    }
     assert "private" not in str(request["metadata"])
     assert "base_url" not in captured["client"]
 
@@ -79,6 +84,34 @@ def test_provider_passes_custom_base_url_to_openai_client() -> None:
     ).complete_json(workflow="gateway", instructions="", payload={}, schema=SCHEMA)
     assert result == {"status": "ok"}
     assert captured["base_url"] == "https://gateway.example.com/openai/v1"
+    assert captured["timeout"] == 180.0
+    assert captured["max_retries"] == 0
+
+
+def test_gateway_timeout_is_not_reported_as_a_network_configuration_error() -> None:
+    class TimeoutClient:
+        def __init__(self, **_kwargs):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        @staticmethod
+        def create(**_kwargs):
+            request = httpx.Request(
+                "POST", "https://gateway.example.com/v1/chat/completions"
+            )
+            raise APITimeoutError(request=request)
+
+    credentials = InMemoryCredentialStore()
+    credentials.set("gateway-token")
+    with pytest.raises(AIProviderError) as failure:
+        OpenAITextProvider(
+            credentials,
+            SettingsDatabase("https://gateway.example.com/v1", "chat_completions"),
+            TimeoutClient,
+        ).complete_json(workflow="timeout", instructions="", payload={}, schema=SCHEMA)
+
+    assert failure.value.code == "timeout"
+    assert "已等待 180 秒" in failure.value.user_message
+    assert "模型线路拥堵" in failure.value.user_message
 
 
 def test_provider_uses_minimal_chat_completions_request_and_validates_result() -> None:
@@ -140,7 +173,11 @@ def test_chat_completions_mode_calls_gateway_chat_endpoint_with_openai_sdk() -> 
                         "message": {"role": "assistant", "content": '{"status":"ok"}'},
                     }
                 ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
             },
         )
 
@@ -156,7 +193,9 @@ def test_chat_completions_mode_calls_gateway_chat_endpoint_with_openai_sdk() -> 
         credentials,
         SettingsDatabase("https://www.juapi.net/v1", "chat_completions"),
         client_factory,
-    ).complete_json(workflow="connection_test", instructions="", payload={}, schema=SCHEMA)
+    ).complete_json(
+        workflow="connection_test", instructions="", payload={}, schema=SCHEMA
+    )
 
     assert result == {"status": "ok"}
     assert captured["url"] == "https://www.juapi.net/v1/chat/completions"
@@ -182,7 +221,7 @@ def test_provider_blocks_missing_key_and_invalid_structured_output() -> None:
     credentials = InMemoryCredentialStore()
     credentials.set("sk-test-key")
     with pytest.raises(AIProviderError) as invalid:
-        OpenAITextProvider(credentials, SettingsDatabase(), InvalidClient).complete_json(
-            workflow="test", instructions="", payload={}, schema=SCHEMA
-        )
+        OpenAITextProvider(
+            credentials, SettingsDatabase(), InvalidClient
+        ).complete_json(workflow="test", instructions="", payload={}, schema=SCHEMA)
     assert invalid.value.code == "invalid_output"

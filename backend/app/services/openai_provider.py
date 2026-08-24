@@ -65,8 +65,13 @@ class OpenAITextProvider:
         api_mode = str(settings.get("api_mode") or "responses")
         if api_mode not in {"responses", "chat_completions"}:
             raise AIProviderError("bad_request", "接口模式无效，请在设置中重新选择")
-        client_options = {"api_key": api_key, "timeout": 45.0, "max_retries": 1}
         base_url = str(settings.get("base_url") or "").strip()
+        timeout_seconds = 180.0 if base_url else 120.0
+        client_options = {
+            "api_key": api_key,
+            "timeout": timeout_seconds,
+            "max_retries": 0 if base_url else 1,
+        }
         if base_url:
             client_options["base_url"] = base_url
         client = self.client_factory(**client_options)
@@ -126,10 +131,19 @@ class OpenAITextProvider:
             raise AIProviderError(
                 "model_unavailable", f"当前 AI 服务不支持模型 {model}，请在设置中更换"
             ) from error
-        except (APITimeoutError, APIConnectionError) as error:
+        except APITimeoutError as error:
+            target = "AI 中转网关" if base_url else "OpenAI 服务"
+            raise AIProviderError(
+                "timeout",
+                f"{target}响应超时（已等待 {int(timeout_seconds)} 秒）。"
+                "余额充足时也可能是模型线路拥堵，请稍后重试或在设置中更换模型",
+                retryable=True,
+            ) from error
+        except APIConnectionError as error:
             raise AIProviderError(
                 "network",
-                "无法连接 AI 服务，请检查网络和 Base URL 后重试；本地资料和草稿没有丢失",
+                "无法建立到 AI 服务的网络连接，请检查网络、DNS 和 Base URL 后重试；"
+                "本地资料和草稿没有丢失",
                 retryable=True,
             ) from error
         except BadRequestError as error:
@@ -138,9 +152,7 @@ class OpenAITextProvider:
                 if api_mode == "chat_completions" and base_url
                 else "AI 请求无法处理，请检查模型配置或缩短内容"
             )
-            raise AIProviderError(
-                "bad_request", message
-            ) from error
+            raise AIProviderError("bad_request", message) from error
         except APIStatusError as error:
             status = getattr(error, "status_code", None)
             suffix = f"（HTTP {status}）" if status else ""
