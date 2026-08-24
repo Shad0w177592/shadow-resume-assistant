@@ -40,13 +40,41 @@ class TranscriptionService:
                 base_url = str(settings.get("base_url") or "").strip()
                 if base_url:
                     client_options["base_url"] = base_url
-            with path.open("rb") as stream:
-                result = OpenAI(**client_options).audio.transcriptions.create(
-                    model=str(settings.get("transcription_model") or "gpt-transcribe"),
-                    file=stream,
-                    language="zh",
-                )
-            return result.text.strip()
+            configured_model = str(
+                settings.get("transcription_model") or "gpt-transcribe"
+            ).strip()
+            models = [configured_model]
+            if client_options.get("base_url") and configured_model == "gpt-transcribe":
+                models.append("whisper-1")
+
+            client = OpenAI(**client_options)
+            last_compatibility_error: APIStatusError | None = None
+            for model in models:
+                try:
+                    with path.open("rb") as stream:
+                        result = client.audio.transcriptions.create(
+                            model=model,
+                            file=stream,
+                            language="zh",
+                        )
+                    return result.text.strip()
+                except (BadRequestError, NotFoundError) as error:
+                    last_compatibility_error = error
+                except APIStatusError as error:
+                    if error.status_code != 503:
+                        raise
+                    last_compatibility_error = error
+
+            attempted = "、".join(models)
+            status = (
+                f"HTTP {last_compatibility_error.status_code}"
+                if last_compatibility_error is not None
+                else "未知错误"
+            )
+            raise ValueError(
+                f"当前 Base URL 的语音接口不可用（已尝试 {attempted}，{status}）。"
+                "请联系网关确认其支持 /audio/transcriptions，或改用支持语音转写的 API 服务"
+            ) from last_compatibility_error
         except AuthenticationError as error:
             raise ValueError("语音转写鉴权失败，请检查 API Key") from error
         except (BadRequestError, NotFoundError) as error:
