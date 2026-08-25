@@ -48,7 +48,9 @@ RESUME_WRITING_METHOD = (
     "日期、工具、数字或业绩。删除赋能、助力、沉淀、显著提升等无法单独证明价值的套话。"
     "经历栏目负责展示事实与成果，不要在每条末尾生硬追加‘可用于目标岗位’；"
     "能力如何迁移到目标岗位，应集中在自我介绍和打招呼语中说明。"
-    "同一技能只出现一次，技能标题写具体工具或可交付能力。页数以用户在工作台选择的一页或两页为准；"
+    "同一技能只出现一次。专业技能只能写可实际操作的具体软件、工具、平台、编程语言或专业方法，"
+    "并说明用它能完成什么；活动策划、现场控场、沟通协作、执行力等软能力不能放进专业技能栏目。"
+    "页数以用户在工作台选择的一页或两页为准；"
     "导入 Word 时默认尊重原文件页数和版式，但用户主动选择页数时以用户选择为准。"
     "一页简历的内容应覆盖页面至少 80%；两页简历应让第一页填满、第二页超过半页，"
     "即两页总内容至少覆盖可用版面的 75%。内容不足时优先调整字号、字间距、行间距和段落间距，"
@@ -59,15 +61,16 @@ RESUME_WRITING_METHOD = (
 GREETING_MESSAGE_METHOD = (
     "用于 BOSS 直聘首次沟通的打招呼语按首条消息工作流生成，因为对方回复前可能只有一次完整表达机会。"
     "第一步从 JD 提取岗位名称、最重要的 1 至 2 项任务或工具；第二步判断候选人属于应届生、"
-    "有经验求职者或转行求职者；第三步只选择 1 至 2 项最能证明匹配度的真实证据；"
-    "第四步按‘Boss您好—身份—岗位证据—可提供的价值—低压力沟通邀请’压缩成一条完整消息。"
+    "有经验求职者或转行求职者；第三步只选择一项最强的真实证据，或把同一能力下的工具和结果合并为一项；"
+    "第四步按‘Boss您好—身份与目标岗位—最强证据—可提供的价值—低压力沟通邀请’压缩成一条完整消息。"
     "应届生优先写专业、相关项目或实习和具体工具；有经验者优先写年限、同类任务和关键成果；"
     "转行或没有直接经验时写可迁移任务、工具和成果，不主动强调没有经验。"
     "若真实资料包含最快到岗时间、每周可实习天数或可持续月份，可在身份后前置；资料没有则不得编造。"
     "首条消息必须独立完整，不能把关键证据留到下一条，也不要假设可以先发图片简历。"
-    "建议 90 至 180 个中文字符，硬上限 400 个字符；每个岗位单独生成，不使用通用话术群发。"
+    "建议 70 至 140 个中文字符，硬上限 400 个字符；每个岗位单独生成，不使用通用话术群发。"
     "禁止静候您的回复、快速上手、性格开朗、学习能力强、认真负责等无证据套话，"
-    "禁止重复技能、复述整份简历、堆砌公司全称或一次询问薪资福利等多个问题。"
+    "禁止按学校、社团、实习、工作逐段点名，禁止复述职责清单；不要堆砌公司或组织全称，"
+    "也不要一次询问薪资福利等多个问题。"
 )
 
 
@@ -317,28 +320,31 @@ class ResumeWorkflowService:
             "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
             "先依据完整 JD 识别目标岗位的核心任务、交付物、工具和能力，再结合候选人证据写作。"
             "自我介绍必须保持原文的篇幅和信息密度，严格按 payload.summary_style_target 的字符范围"
-            "与句数目标写作；原文较长时不得压缩成两句话。开头必须先写清人物身份或职业定位，"
-            "例如作为经济学专业应届生，不得以面向某岗位、应聘某岗位或名词堆砌开头。"
+            "与句数目标写作；原文较长时不得压缩成两句话。第一句必须出现明确主语，"
+            "写成‘我是一名……’或‘作为……，我……’，不得写成无主语的‘经济学本科在读……’，"
+            "也不得以面向某岗位、应聘某岗位或名词堆砌开头。"
             "自我介绍不是工作经历复述，也不是按时间罗列做过什么。统一采用‘定位—证据—迁移—价值’写法："
             "先写候选人的身份和与岗位最相关的 2 至 3 项特质；"
             "再只选 1 至 2 段最能证明这些特质的经历，"
             "用‘内容运营实习中’‘自媒体实践中’等类别简称，不重复上方已经出现的公司全称；"
-            "经历只作为能力证据，不复述完整职责、流程和所有业绩数字；每项证据后必须明确说明该能力"
+            "每段经历只用一个短句概括做过什么，随即写清由此形成的能力；不得复述准备物料、嘉宾对接、"
+            "流程安排、现场执行等职责清单，也不得重复完整流程和所有业绩数字。每项证据后必须说明该能力"
             "可以用于目标岗位的哪项任务、交付物或业务结果。核心篇幅应回答‘我有什么特质，以及这些特质"
-            "能为这份工作做什么’，而不是回答‘我过去做过什么’。允许自然使用我，但不得反复使用我/本人；"
+            "能为这份工作做什么’，而不是回答‘我过去做过什么’。必须自然使用我，但不要在每句重复我/本人；"
             "禁止空泛表达，包括能够胜任、快速适应、学习能力强、认真负责等空话，不照抄 JD。"
             "专业技能数量必须严格遵守 payload.skill_count_target；该值为 null 时返回 2 至 3 条。"
-            "标题必须是候选人可核实的具体工具或可迁移能力。"
+            "专业技能只接受具体软件、工具、平台、编程语言或专业方法；标题优先采用‘工具 + 用途’，"
+            "例如‘PR / AE 视频剪辑’‘Excel 数据分析’"
+            "‘Codex / DeepSeek AI 应用’‘Word / PPT 文档制作’。"
+            "活动策划执行、现场协调控场、沟通能力、团队协作、执行力、复盘能力属于软能力，"
+            "只能写进经历或自我介绍，绝不能作为专业技能标题。"
             "技能之间必须是不同能力，不得同时返回 AI 信息搜集与 AI 工具应用等语义重叠项；"
-            "应合并为一条 AI 工具应用，再优先从证据中选择 Office/PPT/Excel、文档写作、"
-            "视频剪辑等另一项不同能力。"
-            "简洁到 4 至 14 个字符，"
-            "例如‘Excel 数据整理’‘SQL 数据查询’‘市场数据分析’；"
-            "目标行业、品种、公司和岗位名称只能写在"
-            "正文用途里，禁止写成黑色系数据研究能力这类行业包装标题。数据类技能必须明确写出"
-            "候选人使用的 Excel、SQL、Python、Power BI、Tableau、SPSS 等具体工具；"
-            "正文写清工具或方法、岗位任务及"
-            "可交付成果；禁止只写沟通能力、团队协作、执行力、数据整理等泛化标题。"
+            "应合并为一条 AI 工具应用，再优先从证据中选择 Office、Excel、视频剪辑等另一项硬技能。"
+            "标题简洁到 4 至 18 个字符；目标行业、品种、公司和岗位名称只能写在正文用途里，"
+            "禁止写成黑色系数据研究能力这类行业包装标题。每条专业技能的标题或正文都必须出现"
+            "可核实的具体工具、软件、平台、语言或方法名称，例如 Excel、SQL、Python、PR、AE、"
+            "Word、PPT、Codex、DeepSeek，并写清能完成的任务和交付物。"
+            "不要用活动策划、现场协调、沟通、协作等软能力凑足用户选择的技能条数。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
             "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
             + GREETING_MESSAGE_METHOD
@@ -536,8 +542,8 @@ class ResumeWorkflowService:
         return {
             "channel": "BOSS直聘首次沟通",
             "single_message_only": True,
-            "recommended_character_min": 90,
-            "recommended_character_max": 180,
+            "recommended_character_min": 70,
+            "recommended_character_max": 140,
             "hard_character_max": 400,
             "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
             "availability_only_when_evidenced": True,
@@ -605,6 +611,16 @@ class ResumeWorkflowService:
             issues.append("打招呼语包含无证据套话，应改为工具、任务、项目或成果证据")
         if greeting and not evidence_anchor:
             issues.append("打招呼语缺少可核实的工具、任务、项目、经历或成果证据")
+        experience_clauses = re.findall(
+            r"(?:在|曾在)[^。；;，,]{1,28}(?:经历中|实习中|工作中|任职期间|期间)", greeting
+        )
+        if len(experience_clauses) >= 2:
+            issues.append("打招呼语罗列多段经历，应只保留一项最强岗位证据")
+        greeting_duty_count = len(
+            re.findall(r"负责|独立|准备|对接|安排|收集|组织|推进|跟进|执行|维护", greeting)
+        )
+        if greeting_duty_count >= 4:
+            issues.append("打招呼语写成了职责流水账，应压缩为能力、证据和岗位价值")
         availability_claim = re.search(
             r"(?:随时|立即|最快.{0,8})到岗|一周(?:[1-7一二三四五六七])天|"
             r"(?:实习|到岗).{0,8}(?:个?月|个月)",
@@ -627,6 +643,9 @@ class ResumeWorkflowService:
             opening = re.split(r"[。！？]", summary, maxsplit=1)[0].strip()
             if opening.startswith(("面向", "应聘", "目标岗位")):
                 issues.append("自我介绍缺少明确人物定位，不能以目标岗位或名词堆砌开头")
+            subject_pattern = r"^(?:我(?:是|目前|具备|拥有|擅长)|作为.{1,30}[，,]我)"
+            if summary and not re.search(subject_pattern, opening):
+                issues.append("自我介绍第一句缺少明确主语，应写成‘我是一名……’或‘作为……，我……’")
             identity_pattern = (
                 r"作为.{0,20}(?:应届生|学生|从业者|工程师|运营|研究员|设计师|产品经理)"
                 r"|(?:专业应届生|本科应届生|硕士应届生|在校生|从业者|工程师|研究员|设计师|产品经理)"
@@ -635,6 +654,16 @@ class ResumeWorkflowService:
                 issues.append("自我介绍开头没有写清候选人的身份或职业定位")
             if summary and not re.search(r"在.{0,30}(?:中|期间)|曾经?|通过", summary):
                 issues.append("自我介绍缺少具体经历与能力之间的逻辑连接")
+            summary_duty_count = len(
+                re.findall(r"负责|独立|准备|对接|安排|收集|组织|推进|跟进|执行|维护", summary)
+            )
+            if summary_duty_count >= 4:
+                issues.append("自我介绍复述职责清单，应一句概括经历后转向能力和岗位价值")
+            ability_pattern = (
+                r"形成|培养|锻炼|具备了?|提升了?.{0,8}(?:能力|意识|习惯)|使我"
+            )
+            if summary and not re.search(ability_pattern, summary):
+                issues.append("自我介绍没有说明经历形成了什么能力")
             banned = ("能够胜任", "快速适应", "学习能力强", "认真负责")
             if any(value in summary for value in banned):
                 issues.append("自我介绍包含空泛评价，应改为证据和岗位任务")
@@ -672,10 +701,27 @@ class ResumeWorkflowService:
                     seen_topics[topic] = heading
                 if heading in generic_headings:
                     issues.append(f"技能标题“{heading}”过于泛化，需改为具体工具或能力")
-                if len(re.sub(r"\s+", "", heading)) > 14:
+                if re.search(
+                    r"活动策划|现场协调|现场控场|沟通|协作|执行力|抗压|学习能力|组织协调|复盘能力",
+                    heading,
+                ):
+                    issues.append(f"技能标题“{heading}”属于软能力，不属于专业技能，应放入经历或自我介绍")
+                if len(re.sub(r"\s+", "", heading)) > 18:
                     issues.append(f"技能标题“{heading}”过长，应改为简洁的工具或能力名称")
                 if re.search(r"黑色系|白色系|有色系|商品期货|金融行业|目标岗位", heading):
                     issues.append(f"技能标题“{heading}”含行业包装，应只保留具体工具或能力")
+                concrete_tool = re.search(
+                    r"Excel|SQL|Python|Power\s*BI|Tableau|SPSS|R语言|Word|PPT|PowerPoint|Office|"
+                    r"ChatGPT|DeepSeek|Codex|Claude|Premiere(?:\s*Pro)?|After\s*Effects|Photoshop|"
+                    r"Illustrator|DaVinci|Final\s*Cut|剪映|CapCut|Figma|Axure|XMind|Canva|"
+                    r"JavaScript|TypeScript|Java|C\+\+|SEO|SEM|GA4|CRM|ERP|SAP|\bPR\b|\bAE\b|\bPS\b",
+                    f"{heading} {text}",
+                    re.IGNORECASE,
+                )
+                if not concrete_tool:
+                    issues.append(
+                        f"专业技能“{heading or '未命名'}”没有写明具体工具、软件、平台或专业方法"
+                    )
                 if "数据" in heading and not re.search(
                     r"Excel|SQL|Python|Power\s*BI|Tableau|SPSS|R语言",
                     f"{heading} {text}",

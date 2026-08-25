@@ -186,6 +186,58 @@ def test_summary_quality_requires_clear_target_job_value() -> None:
     assert any("能为目标岗位完成什么" in issue for issue in issues)
 
 
+def test_summary_quality_requires_explicit_subject_and_rejects_duty_repetition() -> None:
+    result = {
+        "summary": (
+            "聊城大学经济学本科在读，擅长活动策划和信息归纳。"
+            "在书友会副理事长经历中负责读书分享会、主题沙龙的策划和落地，"
+            "独立准备物料、嘉宾对接、流程安排、现场执行与活动复盘，"
+            "可以支持电商运营活动执行。"
+        ),
+        "skills": [],
+    }
+
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        result,
+        {"summary"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 2},
+    )
+
+    assert any("明确主语" in issue for issue in issues)
+    assert any("复述职责清单" in issue for issue in issues)
+
+
+def test_professional_skills_require_concrete_tools_and_reject_soft_abilities() -> None:
+    result = {
+        "summary": "",
+        "skills": [
+            {
+                "heading": "活动策划执行",
+                "text": "负责主题活动策划、流程推进和执行复盘，可支持运营活动落地。",
+            },
+            {
+                "heading": "现场协调控场",
+                "text": "具备现场协调和突发问题处理能力，可支持活动现场执行。",
+            },
+            {
+                "heading": "PR / AE 视频剪辑",
+                "text": "会使用 Premiere Pro、After Effects 完成短视频剪辑、包装与成片交付。",
+            },
+        ],
+    }
+
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        result,
+        {"skills"},
+        {"character_min": 0, "character_max": 999, "sentence_target": 0},
+        skill_count_target=3,
+    )
+
+    assert any("活动策划执行" in issue and "不属于专业技能" in issue for issue in issues)
+    assert any("现场协调控场" in issue and "不属于专业技能" in issue for issue in issues)
+    assert not any("PR / AE 视频剪辑" in issue for issue in issues)
+
+
 def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     class Provider:
         request = None
@@ -281,8 +333,8 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     assert provider.request["payload"]["greeting_message_target"] == {
         "channel": "BOSS直聘首次沟通",
         "single_message_only": True,
-        "recommended_character_min": 90,
-        "recommended_character_max": 180,
+        "recommended_character_min": 70,
+        "recommended_character_max": 140,
         "hard_character_max": 400,
         "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
         "availability_only_when_evidenced": True,
@@ -445,3 +497,31 @@ def test_greeting_message_quality_checks_structure_and_limit() -> None:
     assert any("过短" in issue for issue in issues)
     assert any("Boss您好" in issue for issue in issues)
     assert any("尚未入职" in issue for issue in issues)
+
+def test_greeting_message_rejects_experience_roll_call_and_duty_list() -> None:
+    result = {
+        "greeting_message": (
+            "Boss您好，我是经济学专业应届生，想应聘电商运营岗位。"
+            "在书友会副理事长经历中负责图书分享会、主题沙龙的策划和落地，"
+            "独立准备物料、嘉宾对接和流程安排；在辩论社经历中负责资料搜集、"
+            "流程协调和现场执行，可以支持岗位工作，希望方便时进一步沟通。"
+        ),
+        "summary": "",
+        "skills": [],
+    }
+
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        result,
+        set(),
+        {"character_min": 0, "character_max": 200, "sentence_target": 0},
+        target_job_title="电商运营",
+    )
+
+    assert any("罗列多段经历" in issue for issue in issues)
+    assert any("职责流水账" in issue for issue in issues)
+
+
+def test_greeting_target_prefers_short_single_evidence_message() -> None:
+    target = ResumeWorkflowService._greeting_message_target()
+    assert target["recommended_character_min"] == 70
+    assert target["recommended_character_max"] == 140

@@ -125,8 +125,9 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await user.click(screen.getByRole("button", { name: "取消提醒并保留简历" }));
   expect(screen.queryByText("简历已生成，请核实 AI 补充内容")).not.toBeInTheDocument();
   expect(screen.getByDisplayValue("完成工作流")).toBeInTheDocument();
-  expect(screen.getByText(/身份 → 岗位证据 → 可提供价值 → 沟通邀请/)).toBeInTheDocument();
-  expect(screen.getByText(/到岗时间和实习周期只在资料已有时使用/)).toBeInTheDocument();
+  expect(screen.getByText(/不罗列全部经历/)).toBeInTheDocument();
+  expect(screen.getByText(/只写一项最强岗位证据/)).toBeInTheDocument();
+  expect(screen.getByText(/建议 70–140 字/)).toBeInTheDocument();
   const greetingEditor = screen.getByRole("textbox", { name: "打招呼语" });
   expect(greetingEditor).toHaveAttribute("maxlength", "400");
   expect(greetingEditor).toHaveValue(draft.document.greeting_message);
