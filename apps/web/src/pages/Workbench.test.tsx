@@ -145,6 +145,23 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
   await user.click(screen.getByRole("button", { name: "复制打招呼语" }));
   expect(clipboardWrite).toHaveBeenCalledWith(draft.document.greeting_message);
+  fireEvent.focus(greetingEditor);
+  expect(screen.getByText("已选择打招呼语")).toBeInTheDocument();
+  const modificationField = screen.getByLabelText("修改要求").closest("label");
+  const greetingCard = greetingEditor.closest(".greeting-message-card");
+  expect(
+    modificationField!.compareDocumentPosition(greetingCard!)
+    & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("修改要求"), {
+    target: { value: "写得更贴合岗位，并突出我能提供的价值" },
+  });
+  await user.click(screen.getByRole("button", { name: "生成修改" }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    "/api/jobs/job-1/edit-proposals", "POST",
+    expect.objectContaining({ target_paragraph_id: "greeting" }),
+  ));
+  await user.click(screen.getByRole("button", { name: "拒绝" }));
   const summaryEditor = screen.getByLabelText("编辑自我介绍");
   expect(summaryEditor).toHaveValue("原来的自我介绍");
   await user.clear(summaryEditor);

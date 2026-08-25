@@ -35,7 +35,18 @@ class EditProposalService:
         draft = self.drafts.get_draft(job_id)
         document = ResumeDocument.model_validate(draft["document"])
         target_kind, target = self._find_target(document, target_paragraph_id)
-        if target_kind == "heading":
+        if target_kind == "greeting":
+            before = target.greeting_message
+            evidence_ids = list(
+                dict.fromkeys(
+                    str(source_id)
+                    for section in target.sections
+                    for block in section.blocks
+                    for paragraph in block.paragraphs
+                    for source_id in paragraph.source_entry_ids
+                )
+            )
+        elif target_kind == "heading":
             before = target.heading
             evidence_ids = list(
                 dict.fromkeys(
@@ -57,15 +68,27 @@ class EditProposalService:
             )
         source_texts.append(before)
         if self.provider:
+            greeting_instruction = (
+                "只修改BOSS直聘打招呼语，最多142个字符，突出已有经历、具体技能、"
+                "岗位动机和可提供的价值，不编造事实。"
+            )
             heading_instruction = "只修改目标条目标题，使标题简洁、具体且准确反映已有内容。"
             paragraph_instruction = (
                 "只修改目标段落的表达，不新增或更改公司、岗位、学校、日期、技能、数字、职责和成果。"
             )
+            instruction_by_kind = {
+                "greeting": greeting_instruction,
+                "heading": heading_instruction,
+                "paragraph": paragraph_instruction,
+            }
+            workflow_by_kind = {
+                "greeting": "greeting_rewrite",
+                "heading": "heading_rewrite",
+                "paragraph": "paragraph_rewrite",
+            }
             result = self.provider.complete_json(
-                workflow="heading_rewrite" if target_kind == "heading" else "paragraph_rewrite",
-                instructions=(
-                    heading_instruction if target_kind == "heading" else paragraph_instruction
-                )
+                workflow=workflow_by_kind[target_kind],
+                instructions=instruction_by_kind[target_kind]
                 + "返回修改后的文字及简短理由；这只是建议，不能声称已经保存。",
                 payload={
                     "target_kind": target_kind,
@@ -78,6 +101,8 @@ class EditProposalService:
             after, reason = result["text"].strip(), result["reason"].strip()
         else:
             after, reason = self._rewrite(before, instruction)
+        if target_kind == "greeting" and len(after) > 142:
+            raise ValueError("打招呼语修改结果超过142个字符，请重新生成")
         fact_result = check_hard_facts(source_texts, after)
         if not fact_result.allowed:
             detail = explain_violations(fact_result.violations)
@@ -152,15 +177,21 @@ class EditProposalService:
             raise KeyError(proposal["draft_id"])
         document = ResumeDocument.model_validate_json(row[1])
         target_kind, target = self._find_target(document, proposal["target_block_id"])
-        current_text = target.heading if target_kind == "heading" else target.text
+        current_text = (
+            target.greeting_message
+            if target_kind == "greeting"
+            else (target.heading if target_kind == "heading" else target.text)
+        )
         if current_text != proposal["before_text"]:
             raise ValueError("目标内容已变化，请重新生成修改建议")
-        if target_kind == "heading":
+        if target_kind == "greeting":
+            target.greeting_message = proposal["after_text"]
+        elif target_kind == "heading":
             target.heading = proposal["after_text"]
         else:
             target.text = proposal["after_text"]
         self.drafts._save(row[0], document)
-        if proposal["payload"]["save_scope"] == "also_profile":
+        if proposal["payload"]["save_scope"] == "also_profile" and target_kind != "greeting":
             evidence_ids = proposal["payload"]["evidence_ids"]
             if target_kind == "heading":
                 evidence_ids = evidence_ids[:1]
@@ -193,6 +224,8 @@ class EditProposalService:
 
     @staticmethod
     def _find_target(document: ResumeDocument, target_id: str) -> tuple[str, Any]:
+        if target_id == "greeting":
+            return "greeting", document
         if target_id.startswith("heading:"):
             block_id = target_id.removeprefix("heading:")
             for section in document.sections:

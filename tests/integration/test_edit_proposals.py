@@ -254,3 +254,59 @@ def test_ai_proposal_can_rename_block_heading_and_update_profile_title(
         )
         assert updated["title"] == "Python 项目交付"
         assert len(calls) == 1
+
+
+def test_ai_proposal_can_rewrite_greeting_without_changing_resume_sections_or_profile(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_TEST_DETERMINISTIC_AI", "1")
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "edit-session")
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "greeting-edit-data", credentials)
+    calls = []
+
+    def complete_json(self, **request):
+        calls.append(request)
+        assert request["workflow"] == "greeting_rewrite"
+        assert request["payload"]["target_kind"] == "greeting"
+        return {
+            "text": (
+                "BOSS您好，我叫杨丰铭，具备项目交付与AI工具应用经验，"
+                "能够支持岗位需求整理和任务推进，希望能有机会与您进一步沟通。"
+            ),
+            "reason": "突出岗位相关经历和可提供的价值",
+        }
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    with TestClient(app) as client:
+        draft, _entries = prepare(client)
+        original_sections = draft["document"]["sections"]
+        original_profile = client.get("/api/profile", headers=HEADERS).json()
+        monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI")
+
+        response = client.post(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals",
+            headers=HEADERS,
+            json={
+                "target_paragraph_id": "greeting",
+                "instruction": "写得更贴合项目岗位，并突出我能提供的价值",
+                "save_scope": "also_profile",
+            },
+        )
+
+        assert response.status_code == 201, response.text
+        proposal = response.json()
+        assert proposal["payload"]["target_kind"] == "greeting"
+        assert len(proposal["after_text"]) <= 142
+        accepted = client.post(
+            f"/api/edit-proposals/{proposal['id']}/accept", headers=HEADERS
+        )
+        assert accepted.status_code == 200, accepted.text
+        changed = client.get(
+            f"/api/jobs/{draft['job_target_id']}/draft", headers=HEADERS
+        ).json()["document"]
+        assert changed["greeting_message"] == proposal["after_text"]
+        assert changed["sections"] == original_sections
+        assert client.get("/api/profile", headers=HEADERS).json() == original_profile
+        assert len(calls) == 1
