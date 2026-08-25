@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.security.credentials import InMemoryCredentialStore
+from app.services.openai_provider import OpenAITextProvider
 
 
 HEADERS = {"x-shadow-session": "edit-session"}
@@ -187,7 +188,69 @@ def test_pending_proposal_survives_reload_and_new_proposal_supersedes_old_one(
             f"/api/edit-proposals/{second['id']}/accept", headers=HEADERS
         )
         assert accepted.status_code == 200
-        assert client.get(
-            f"/api/jobs/{draft['job_target_id']}/edit-proposals/pending",
+        assert (
+            client.get(
+                f"/api/jobs/{draft['job_target_id']}/edit-proposals/pending",
+                headers=HEADERS,
+            ).json()
+            == []
+        )
+
+
+def test_ai_proposal_can_rename_block_heading_and_update_profile_title(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_TEST_DETERMINISTIC_AI", "1")
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "edit-session")
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "heading-edit-data", credentials)
+    calls = []
+
+    def complete_json(self, **request):
+        calls.append(request)
+        assert request["payload"]["target_kind"] == "heading"
+        return {
+            "text": "Python 项目交付",
+            "reason": "标题改为具体工具与可交付能力",
+        }
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    with TestClient(app) as client:
+        draft, entries = prepare(client)
+        block = draft["document"]["sections"][0]["blocks"][0]
+        monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI")
+        target = f"heading:{block['block_id']}"
+        original_paragraphs = block["paragraphs"]
+
+        response = client.post(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals",
             headers=HEADERS,
-        ).json() == []
+            json={
+                "target_paragraph_id": target,
+                "instruction": "不要活动策划执行，改成具体专业技能",
+                "save_scope": "also_profile",
+            },
+        )
+
+        assert response.status_code == 201, response.text
+        proposal = response.json()
+        assert proposal["before_text"] == "项目一"
+        assert proposal["after_text"] == "Python 项目交付"
+        assert proposal["payload"]["target_kind"] == "heading"
+        accepted = client.post(
+            f"/api/edit-proposals/{proposal['id']}/accept", headers=HEADERS
+        )
+        assert accepted.status_code == 200, accepted.text
+        changed = client.get(
+            f"/api/jobs/{draft['job_target_id']}/draft", headers=HEADERS
+        ).json()["document"]
+        changed_block = changed["sections"][0]["blocks"][0]
+        assert changed_block["heading"] == "Python 项目交付"
+        assert changed_block["paragraphs"] == original_paragraphs
+        profile_entries = client.get("/api/profile", headers=HEADERS).json()["entries"]
+        updated = next(
+            item for item in profile_entries if item["id"] == entries[0]["id"]
+        )
+        assert updated["title"] == "Python 项目交付"
+        assert len(calls) == 1

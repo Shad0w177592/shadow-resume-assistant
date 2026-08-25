@@ -34,27 +34,41 @@ class EditProposalService:
             raise ValueError("保存范围无效")
         draft = self.drafts.get_draft(job_id)
         document = ResumeDocument.model_validate(draft["document"])
-        paragraph = self._find_paragraph(document, target_paragraph_id)
-        before = paragraph.text
-        evidence_ids = [str(item) for item in paragraph.source_entry_ids]
+        target_kind, target = self._find_target(document, target_paragraph_id)
+        if target_kind == "heading":
+            before = target.heading
+            evidence_ids = list(
+                dict.fromkeys(
+                    str(source_id)
+                    for paragraph in target.paragraphs
+                    for source_id in paragraph.source_entry_ids
+                )
+            )
+        else:
+            before = target.text
+            evidence_ids = [str(item) for item in target.source_entry_ids]
         source_texts = []
         for entry_id in evidence_ids:
             entry = self.profiles.get_entry(entry_id)
             source_texts.append(
                 json.dumps(
-                    {"title": entry["title"], "payload": entry["payload"]},
-                    ensure_ascii=False,
+                    {"title": entry["title"], "payload": entry["payload"]}, ensure_ascii=False
                 )
             )
         source_texts.append(before)
         if self.provider:
+            heading_instruction = "只修改目标条目标题，使标题简洁、具体且准确反映已有内容。"
+            paragraph_instruction = (
+                "只修改目标段落的表达，不新增或更改公司、岗位、学校、日期、技能、数字、职责和成果。"
+            )
             result = self.provider.complete_json(
-                workflow="paragraph_rewrite",
+                workflow="heading_rewrite" if target_kind == "heading" else "paragraph_rewrite",
                 instructions=(
-                    "只修改目标段落的表达，不新增或更改公司、岗位、学校、日期、技能、数字、职责和成果。"
-                    "返回修改后的文字及简短理由；这只是建议，不能声称已经保存。"
-                ),
+                    heading_instruction if target_kind == "heading" else paragraph_instruction
+                )
+                + "返回修改后的文字及简短理由；这只是建议，不能声称已经保存。",
                 payload={
+                    "target_kind": target_kind,
                     "target_text": before,
                     "instruction": instruction,
                     "evidence": [redact_text_for_ai(value) for value in source_texts],
@@ -76,6 +90,7 @@ class EditProposalService:
             "evidence_ids": evidence_ids,
             "save_scope": save_scope,
             "contains_new_fact": False,
+            "target_kind": target_kind,
         }
         with self.database.connect() as connection:
             connection.execute(
@@ -136,17 +151,28 @@ class EditProposalService:
         if row is None:
             raise KeyError(proposal["draft_id"])
         document = ResumeDocument.model_validate_json(row[1])
-        paragraph = self._find_paragraph(document, proposal["target_block_id"])
-        if paragraph.text != proposal["before_text"]:
-            raise ValueError("目标段落已变化，请重新生成修改建议")
-        paragraph.text = proposal["after_text"]
+        target_kind, target = self._find_target(document, proposal["target_block_id"])
+        current_text = target.heading if target_kind == "heading" else target.text
+        if current_text != proposal["before_text"]:
+            raise ValueError("目标内容已变化，请重新生成修改建议")
+        if target_kind == "heading":
+            target.heading = proposal["after_text"]
+        else:
+            target.text = proposal["after_text"]
         self.drafts._save(row[0], document)
         if proposal["payload"]["save_scope"] == "also_profile":
-            for entry_id in proposal["payload"]["evidence_ids"]:
+            evidence_ids = proposal["payload"]["evidence_ids"]
+            if target_kind == "heading":
+                evidence_ids = evidence_ids[:1]
+            for entry_id in evidence_ids:
                 entry = self.profiles.get_entry(entry_id)
                 payload = dict(entry["payload"])
-                payload["content"] = proposal["after_text"]
-                self.profiles.update_entry(entry_id, entry["section_key"], entry["title"], payload)
+                title = entry["title"]
+                if target_kind == "heading":
+                    title = proposal["after_text"]
+                else:
+                    payload["content"] = proposal["after_text"]
+                self.profiles.update_entry(entry_id, entry["section_key"], title, payload)
         with self.database.connect() as connection:
             connection.execute(
                 "UPDATE edit_proposal SET status='accepted', updated_at=? WHERE id=?",
@@ -164,6 +190,17 @@ class EditProposalService:
                 (utc_now(), proposal_id),
             )
         return self.get(proposal_id)
+
+    @staticmethod
+    def _find_target(document: ResumeDocument, target_id: str) -> tuple[str, Any]:
+        if target_id.startswith("heading:"):
+            block_id = target_id.removeprefix("heading:")
+            for section in document.sections:
+                for block in section.blocks:
+                    if block.block_id == block_id:
+                        return "heading", block
+            raise KeyError(target_id)
+        return "paragraph", EditProposalService._find_paragraph(document, target_id)
 
     @staticmethod
     def _find_paragraph(document: ResumeDocument, paragraph_id: str):
