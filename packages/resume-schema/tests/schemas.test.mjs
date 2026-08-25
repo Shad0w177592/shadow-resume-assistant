@@ -12,3 +12,9 @@ for (const name of schemaNames) {
   });
 }
 
+test("resume document greeting message is capped at 142 characters", async () => {
+  const schema = await loadSchema("resume-document");
+  assert.equal(schema.properties.greeting_message.maxLength, 142);
+  assert.equal(schema.properties.greeting_message.default, "");
+});
+

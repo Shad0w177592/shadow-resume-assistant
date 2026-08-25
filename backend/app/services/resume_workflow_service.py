@@ -61,15 +61,15 @@ RESUME_WRITING_METHOD = (
 GREETING_MESSAGE_METHOD = (
     "用于 BOSS 直聘首次沟通的打招呼语按首条消息工作流生成，因为对方回复前可能只有一次完整表达机会。"
     "第一步从 JD 提取岗位名称、最重要的 1 至 2 项任务或工具；第二步判断候选人属于应届生、"
-    "有经验求职者或转行求职者；第三步只选择一项最强的真实证据，或把同一能力下的工具和结果合并为一项；"
-    "第四步按‘Boss您好—身份与目标岗位—最强证据—可提供的价值—低压力沟通邀请’压缩成一条完整消息。"
+    "有经验求职者或转行求职者；第三步从真实资料中组合与岗位相关的经历、技能、成果、软能力与岗位动机；"
+    "第四步按‘Boss您好—姓名与身份—相关经历与技能—岗位动机与软能力—到岗信息—沟通邀请’写成一条完整消息。"
     "应届生优先写专业、相关项目或实习和具体工具；有经验者优先写年限、同类任务和关键成果；"
     "转行或没有直接经验时写可迁移任务、工具和成果，不主动强调没有经验。"
     "若真实资料包含最快到岗时间、每周可实习天数或可持续月份，可在身份后前置；资料没有则不得编造。"
     "首条消息必须独立完整，不能把关键证据留到下一条，也不要假设可以先发图片简历。"
-    "建议 70 至 140 个中文字符，硬上限 400 个字符；每个岗位单独生成，不使用通用话术群发。"
-    "禁止静候您的回复、快速上手、性格开朗、学习能力强、认真负责等无证据套话，"
-    "禁止按学校、社团、实习、工作逐段点名，禁止复述职责清单；不要堆砌公司或组织全称，"
+    "建议写到 120 至 142 个字符，硬上限 142 个字符；中文、英文、数字、空格和标点都计入字符数。"
+    "每个岗位单独生成，不使用通用话术群发。沟通协作、踏实、能吃苦、学习适应等软能力可以作为补充，"
+    "但必须同时包含真实经历、技能或成果；禁止复述职责清单，不要堆砌公司或组织全称，"
     "也不要一次询问薪资福利等多个问题。"
 )
 
@@ -396,7 +396,7 @@ class ResumeWorkflowService:
         greeting_message = str(result.get("greeting_message") or "").strip()
         if not greeting_message:
             greeting_message = self._fallback_greeting_message(document, job)
-        document.greeting_message = greeting_message[:400]
+        document.greeting_message = greeting_message[:142]
         if "summary" in rewrite_sections:
             summary = result["summary"].strip()
             if not summary:
@@ -535,17 +535,24 @@ class ResumeWorkflowService:
         return (
             f"Boss您好，我是{name}，想应聘{title}岗位。{evidence}，"
             f"可以支持{title}岗位的相关任务与交付。如果您认为方向匹配，希望方便时进一步沟通，谢谢。"
-        )[:400]
+        )[:142]
 
     @staticmethod
     def _greeting_message_target() -> dict[str, Any]:
         return {
             "channel": "BOSS直聘首次沟通",
             "single_message_only": True,
-            "recommended_character_min": 70,
-            "recommended_character_max": 140,
-            "hard_character_max": 400,
-            "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
+            "recommended_character_min": 120,
+            "recommended_character_max": 142,
+            "hard_character_max": 142,
+            "structure": [
+                "称呼",
+                "姓名与身份",
+                "相关经历与技能",
+                "岗位动机与软能力",
+                "到岗信息",
+                "沟通邀请",
+            ],
             "availability_only_when_evidenced": True,
         }
 
@@ -582,16 +589,17 @@ class ResumeWorkflowService:
                 "希望方便时进一步沟通交流，谢谢。"
             )
         ).strip()
-        greeting_length = len(re.sub(r"\s+", "", greeting))
+        greeting_length = len(greeting)
         if greeting_length < 50:
             issues.append("打招呼语过短，需要包含身份、岗位匹配证据、可提供的价值和沟通邀请")
-        if greeting_length > 400:
-            issues.append("打招呼语超过 400 个字符")
+        if greeting_length > 142:
+            issues.append("打招呼语超过 142 个字符")
         if greeting and not re.match(r"(?:BOSS|Boss|boss)您好", greeting):
             issues.append("打招呼语应以 Boss您好 开头")
         if "很高兴与你共事" in greeting or "很高兴与您共事" in greeting:
             issues.append("尚未入职，打招呼语不能写很高兴与您共事")
-        if greeting and not re.search(r"沟通|交流|详聊|进一步了解", greeting):
+        invitation = r"(?:希望|请).{0,24}(?:沟通|交流|详聊|了解|机会|考虑|回复)|为贵团队效力"
+        if greeting and not re.search(invitation, greeting):
             issues.append("打招呼语结尾缺少明确、礼貌的沟通邀请")
         if greeting and not re.search(r"可用于|能够|可以|经验|能力|熟悉|擅长", greeting):
             issues.append("打招呼语没有说明候选人能为岗位提供的具体价值")
@@ -607,22 +615,17 @@ class ResumeWorkflowService:
             re.IGNORECASE,
         )
         generic_phrases = ("静候您的回复", "快速上手", "性格开朗", "学习能力强", "认真负责")
-        if any(value in greeting for value in generic_phrases):
+        if any(value in greeting for value in generic_phrases) and not evidence_anchor:
             issues.append("打招呼语包含无证据套话，应改为工具、任务、项目或成果证据")
         if greeting and not evidence_anchor:
             issues.append("打招呼语缺少可核实的工具、任务、项目、经历或成果证据")
-        experience_clauses = re.findall(
-            r"(?:在|曾在)[^。；;，,]{1,28}(?:经历中|实习中|工作中|任职期间|期间)", greeting
-        )
-        if len(experience_clauses) >= 2:
-            issues.append("打招呼语罗列多段经历，应只保留一项最强岗位证据")
         greeting_duty_count = len(
             re.findall(r"负责|独立|准备|对接|安排|收集|组织|推进|跟进|执行|维护", greeting)
         )
         if greeting_duty_count >= 4:
             issues.append("打招呼语写成了职责流水账，应压缩为能力、证据和岗位价值")
         availability_claim = re.search(
-            r"(?:随时|立即|最快.{0,8})到岗|一周(?:[1-7一二三四五六七])天|"
+            r"(?:随时|立即|最快.{0,8}|次日(?:就)?(?:能|可)?)到岗|一周(?:[1-7一二三四五六七])天|"
             r"(?:实习|到岗).{0,8}(?:个?月|个月)",
             greeting,
         )

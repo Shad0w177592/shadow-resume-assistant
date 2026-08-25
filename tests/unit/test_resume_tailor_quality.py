@@ -333,10 +333,10 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
     assert provider.request["payload"]["greeting_message_target"] == {
         "channel": "BOSS直聘首次沟通",
         "single_message_only": True,
-        "recommended_character_min": 70,
-        "recommended_character_max": 140,
-        "hard_character_max": 400,
-        "structure": ["称呼", "身份", "岗位证据", "可提供的价值", "沟通邀请"],
+        "recommended_character_min": 120,
+        "recommended_character_max": 142,
+        "hard_character_max": 142,
+        "structure": ["称呼", "姓名与身份", "相关经历与技能", "岗位动机与软能力", "到岗信息", "沟通邀请"],
         "availability_only_when_evidenced": True,
     }
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
@@ -498,13 +498,13 @@ def test_greeting_message_quality_checks_structure_and_limit() -> None:
     assert any("Boss您好" in issue for issue in issues)
     assert any("尚未入职" in issue for issue in issues)
 
-def test_greeting_message_rejects_experience_roll_call_and_duty_list() -> None:
+def test_greeting_message_accepts_rich_sample_but_rejects_duty_list() -> None:
     result = {
         "greeting_message": (
-            "Boss您好，我是经济学专业应届生，想应聘电商运营岗位。"
-            "在书友会副理事长经历中负责图书分享会、主题沙龙的策划和落地，"
-            "独立准备物料、嘉宾对接和流程安排；在辩论社经历中负责资料搜集、"
-            "流程协调和现场执行，可以支持岗位工作，希望方便时进一步沟通。"
+            "BOSS您好，我叫杨丰铭，是聊城大学的应届生。有四个月的直播运营实习经验，"
+            "自身渴望投身直播/电商运营行业，熟练掌握直播推流、直播间视觉优化及短视频剪辑。"
+            "具备高效沟通协作及解决问题能力，能快速应对运营挑战，勤干活能吃苦！"
+            "请您给我一个机会为贵团队效力！"
         ),
         "summary": "",
         "skills": [],
@@ -514,14 +514,38 @@ def test_greeting_message_rejects_experience_roll_call_and_duty_list() -> None:
         result,
         set(),
         {"character_min": 0, "character_max": 200, "sentence_target": 0},
-        target_job_title="电商运营",
+        target_job_title="直播运营",
     )
 
-    assert any("罗列多段经历" in issue for issue in issues)
-    assert any("职责流水账" in issue for issue in issues)
+    assert len(result["greeting_message"]) <= 142
+    assert issues == []
+
+    duty_list = dict(result)
+    duty_list["greeting_message"] = (
+        "BOSS您好，我想应聘直播运营岗位，曾负责准备物料、对接嘉宾、安排流程、"
+        "组织活动、推进执行和维护现场，可以支持岗位工作，希望进一步沟通。"
+    )
+    duty_issues = ResumeWorkflowService._tailor_quality_issues(
+        duty_list,
+        set(),
+        {"character_min": 0, "character_max": 200, "sentence_target": 0},
+        target_job_title="直播运营",
+    )
+    assert any("职责流水账" in issue for issue in duty_issues)
 
 
-def test_greeting_target_prefers_short_single_evidence_message() -> None:
+def test_greeting_target_counts_all_characters_and_caps_at_142() -> None:
     target = ResumeWorkflowService._greeting_message_target()
-    assert target["recommended_character_min"] == 70
-    assert target["recommended_character_max"] == 140
+    assert target["recommended_character_min"] == 120
+    assert target["recommended_character_max"] == 142
+    assert target["hard_character_max"] == 142
+
+    prefix = "Boss您好，"
+    over_limit = prefix + "！" * (143 - len(prefix))
+    issues = ResumeWorkflowService._tailor_quality_issues(
+        {"greeting_message": over_limit, "summary": "", "skills": []},
+        set(),
+        {"character_min": 0, "character_max": 200, "sentence_target": 0},
+    )
+    assert len(over_limit) == 143
+    assert any("超过 142 个字符" in issue for issue in issues)

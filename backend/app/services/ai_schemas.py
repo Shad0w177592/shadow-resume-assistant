@@ -50,7 +50,7 @@ RESUME_TAILOR_SCHEMA = {
     "required": ["summary", "skills", "greeting_message"],
     "properties": {
         "summary": {"type": "string"},
-        "greeting_message": {"type": "string", "maxLength": 400},
+        "greeting_message": {"type": "string", "maxLength": 142},
         "skills": {
             "type": "array",
             "maxItems": 20,
