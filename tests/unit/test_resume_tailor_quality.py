@@ -186,7 +186,9 @@ def test_summary_quality_requires_clear_target_job_value() -> None:
     assert any("能为目标岗位完成什么" in issue for issue in issues)
 
 
-def test_summary_quality_requires_explicit_subject_and_rejects_duty_repetition() -> None:
+def test_summary_quality_requires_explicit_subject_and_rejects_duty_repetition() -> (
+    None
+):
     result = {
         "summary": (
             "聊城大学经济学本科在读，擅长活动策划和信息归纳。"
@@ -233,8 +235,12 @@ def test_professional_skills_require_concrete_tools_and_reject_soft_abilities() 
         skill_count_target=3,
     )
 
-    assert any("活动策划执行" in issue and "不属于专业技能" in issue for issue in issues)
-    assert any("现场协调控场" in issue and "不属于专业技能" in issue for issue in issues)
+    assert any(
+        "活动策划执行" in issue and "不属于专业技能" in issue for issue in issues
+    )
+    assert any(
+        "现场协调控场" in issue and "不属于专业技能" in issue for issue in issues
+    )
     assert not any("PR / AE 视频剪辑" in issue for issue in issues)
 
 
@@ -336,11 +342,43 @@ def test_configured_skill_count_controls_ai_output_and_final_section() -> None:
         "recommended_character_min": 120,
         "recommended_character_max": 142,
         "hard_character_max": 142,
-        "structure": ["称呼", "姓名与身份", "相关经历与技能", "岗位动机与软能力", "到岗信息", "沟通邀请"],
+        "structure": [
+            "称呼",
+            "姓名与身份",
+            "相关经历与技能",
+            "岗位动机与软能力",
+            "到岗信息",
+            "沟通邀请",
+        ],
         "availability_only_when_evidenced": True,
     }
     assert "定位—证据—迁移—价值" in provider.request["instructions"]
     assert "严格遵守 payload.skill_count_target" in provider.request["instructions"]
+
+
+def test_unlimited_checked_work_section_is_not_removed_by_page_budget() -> None:
+    config = {
+        "template": "single_column",
+        "page_target": 1,
+        "rewrite_sections": ["work"],
+        "sections": [{"section_key": "work", "max_entries": None}],
+    }
+    entries = [
+        {
+            "id": str(index),
+            "section_key": "work",
+            "title": f"工作经历 {index}",
+            "payload": {"content": "职责与成果" * 300},
+            "selection_mode": "ai_decide",
+        }
+        for index in range(2)
+    ]
+    warnings: list[str] = []
+
+    result = ResumeWorkflowService._fit_budget(config, entries, warnings)
+
+    assert len(result) == 2
+    assert not any("页数预算省略" in warning for warning in warnings)
 
 
 def test_explicit_section_count_is_not_reduced_by_page_budget() -> None:
@@ -436,7 +474,10 @@ def test_fallback_greeting_uses_resume_evidence_and_target_job() -> None:
     assert "整理渠道数据并完成活动复盘" in greeting
     assert "具有匹配点" not in greeting
 
-def test_greeting_message_quality_rejects_generic_and_unsupported_availability() -> None:
+
+def test_greeting_message_quality_rejects_generic_and_unsupported_availability() -> (
+    None
+):
     generic = {
         "greeting_message": (
             "Boss您好，我想应聘电商运营岗位，性格开朗、学习能力强，可以快速上手，"
@@ -471,7 +512,10 @@ def test_greeting_message_quality_rejects_generic_and_unsupported_availability()
         evidence_text="Excel 数据复盘",
     )
 
-    assert any("到岗时间或实习周期没有资料依据" in issue for issue in availability_issues)
+    assert any(
+        "到岗时间或实习周期没有资料依据" in issue for issue in availability_issues
+    )
+
 
 def test_greeting_message_quality_checks_structure_and_limit() -> None:
     valid = {
@@ -482,9 +526,14 @@ def test_greeting_message_quality_checks_structure_and_limit() -> None:
         "summary": "",
         "skills": [],
     }
-    assert ResumeWorkflowService._tailor_quality_issues(
-        valid, set(), {"character_min": 0, "character_max": 200, "sentence_target": 0}
-    ) == []
+    assert (
+        ResumeWorkflowService._tailor_quality_issues(
+            valid,
+            set(),
+            {"character_min": 0, "character_max": 200, "sentence_target": 0},
+        )
+        == []
+    )
 
     invalid = {
         "greeting_message": "你好，很高兴与您共事，希望给个机会。",
@@ -497,6 +546,7 @@ def test_greeting_message_quality_checks_structure_and_limit() -> None:
     assert any("过短" in issue for issue in issues)
     assert any("Boss您好" in issue for issue in issues)
     assert any("尚未入职" in issue for issue in issues)
+
 
 def test_greeting_message_accepts_rich_sample_but_rejects_duty_list() -> None:
     result = {

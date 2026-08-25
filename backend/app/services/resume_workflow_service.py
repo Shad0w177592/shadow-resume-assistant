@@ -254,8 +254,8 @@ class ResumeWorkflowService:
         result = self.provider.complete_json(
             workflow="resume_rewrite",
             instructions=(
-                RESUME_WRITING_METHOD +
-                "你是中文简历编辑器。只重写用户勾选栏目中给定的段落；未勾选栏目不会发送给你。"
+                RESUME_WRITING_METHOD
+                + "你是中文简历编辑器。只重写用户勾选栏目中给定的段落；未勾选栏目不会发送给你。"
                 "不新增公司、岗位、学校、日期、技能、数字或成果。"
                 "每个 paragraph_id 必须原样返回且只返回一次；"
                 "按用户选择的 STAR/CAR/成果优先等策略组织已有事实。"
@@ -316,8 +316,7 @@ class ResumeWorkflowService:
             ],
         }
         instructions = (
-            RESUME_WRITING_METHOD +
-            "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
+            RESUME_WRITING_METHOD + "你是资深中文招聘经理和简历编辑器。只修改用户勾选的栏目。"
             "先依据完整 JD 识别目标岗位的核心任务、交付物、工具和能力，再结合候选人证据写作。"
             "自我介绍必须保持原文的篇幅和信息密度，严格按 payload.summary_style_target 的字符范围"
             "与句数目标写作；原文较长时不得压缩成两句话。第一句必须出现明确主语，"
@@ -346,8 +345,7 @@ class ResumeWorkflowService:
             "Word、PPT、Codex、DeepSeek，并写清能完成的任务和交付物。"
             "不要用活动策划、现场协调、沟通、协作等软能力凑足用户选择的技能条数。"
             "资料中未直接出现的岗位技能允许作为 AI 建议补充，生成后会提示用户核实；"
-            "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。"
-            + GREETING_MESSAGE_METHOD
+            "但不得编造公司、学校、岗位、日期、数字、业绩或任职经历。" + GREETING_MESSAGE_METHOD
         )
         result = self.provider.complete_json(
             workflow="resume_tailor_profile",
@@ -604,8 +602,10 @@ class ResumeWorkflowService:
         if greeting and not re.search(r"可用于|能够|可以|经验|能力|熟悉|擅长", greeting):
             issues.append("打招呼语没有说明候选人能为岗位提供的具体价值")
         job_tokens = re.findall(r"[A-Za-z0-9+#.]{2,}|[\u4e00-\u9fff]{2,}", target_job_title)
-        if target_job_title and job_tokens and not any(
-            token.lower() in greeting.lower() for token in job_tokens
+        if (
+            target_job_title
+            and job_tokens
+            and not any(token.lower() in greeting.lower() for token in job_tokens)
         ):
             issues.append("打招呼语没有明确写出当前目标岗位")
         evidence_anchor = re.search(
@@ -662,9 +662,7 @@ class ResumeWorkflowService:
             )
             if summary_duty_count >= 4:
                 issues.append("自我介绍复述职责清单，应一句概括经历后转向能力和岗位价值")
-            ability_pattern = (
-                r"形成|培养|锻炼|具备了?|提升了?.{0,8}(?:能力|意识|习惯)|使我"
-            )
+            ability_pattern = r"形成|培养|锻炼|具备了?|提升了?.{0,8}(?:能力|意识|习惯)|使我"
             if summary and not re.search(ability_pattern, summary):
                 issues.append("自我介绍没有说明经历形成了什么能力")
             banned = ("能够胜任", "快速适应", "学习能力强", "认真负责")
@@ -708,7 +706,9 @@ class ResumeWorkflowService:
                     r"活动策划|现场协调|现场控场|沟通|协作|执行力|抗压|学习能力|组织协调|复盘能力",
                     heading,
                 ):
-                    issues.append(f"技能标题“{heading}”属于软能力，不属于专业技能，应放入经历或自我介绍")
+                    issues.append(
+                        f"技能标题“{heading}”属于软能力，不属于专业技能，应放入经历或自我介绍"
+                    )
                 if len(re.sub(r"\s+", "", heading)) > 18:
                     issues.append(f"技能标题“{heading}”过长，应改为简洁的工具或能力名称")
                 if re.search(r"黑色系|白色系|有色系|商品期货|金融行业|目标岗位", heading):
@@ -949,11 +949,8 @@ class ResumeWorkflowService:
                     for item in reversed(result)
                     if item["selection_mode"] != "must_include"
                     and item["section_key"] in rewrite_sections
-                    and (
-                        requested_counts.get(item["section_key"]) is None
-                        or section_counts[item["section_key"]]
-                        > requested_counts[item["section_key"]]
-                    )
+                    and requested_counts.get(item["section_key"]) is not None
+                    and section_counts[item["section_key"]] > requested_counts[item["section_key"]]
                 ),
                 None,
             )
