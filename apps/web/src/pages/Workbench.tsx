@@ -248,10 +248,14 @@ export function WorkbenchPage() {
     setBusy(true);
     try {
       const methods = allowFabrication ? ["add_experience"] : polishMethods;
-      const result = await apiRequest<{ draft: ResumeDraft; added_real_count: number; fabricated: boolean; warnings: string[] }>(`/api/jobs/${jobId}/polish`, "POST", { methods, allow_fabrication: allowFabrication });
+      const result = await apiRequest<{ draft: ResumeDraft; added_real_count: number; changed: boolean; fabricated: boolean; warnings: string[] }>(`/api/jobs/${jobId}/polish`, "POST", { methods, allow_fabrication: allowFabrication });
       setDraft(result.draft);
       if (!allowFabrication && polishMethods.includes("add_experience") && result.added_real_count === 0) {
         setShowFabricationRisk(true);
+        return;
+      }
+      if (!result.changed) {
+        notify("本次润色没有产生改动，请选择其他润色方式后重试", "error");
         return;
       }
       setShowFabricationRisk(false); setShowPolish(false);

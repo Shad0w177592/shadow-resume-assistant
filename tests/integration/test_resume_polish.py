@@ -184,3 +184,78 @@ def test_confirmed_fabrication_uses_ai_in_production_mode(
         ]
         assert "模拟行业项目" in headings
     assert calls == ["fabricated_resume_experience"]
+
+
+def test_expand_existing_sends_all_existing_sections_to_ai_and_reports_change(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "polish-test")
+    monkeypatch.setenv("SHADOW_TEST_DETERMINISTIC_AI", "1")
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "expand-ai-data", credentials)
+    requests = []
+
+    def complete_json(self, **request):
+        requests.append(request)
+        assert request["workflow"] == "resume_rewrite"
+        assert request["payload"]["requirements"]
+        assert request["payload"]["paragraphs"]
+        return {
+            "paragraphs": [
+                {
+                    "paragraph_id": item["paragraph_id"],
+                    "text": f"{item['current_text']}，补充了具体行动和结果。",
+                }
+                for item in request["payload"]["paragraphs"]
+            ]
+        }
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    with TestClient(app) as client:
+        client.post(
+            "/api/profile/entries",
+            headers=HEADERS,
+            json={
+                "section_key": "project",
+                "title": "真实项目",
+                "payload": {"content": "完成需求整理与项目交付"},
+            },
+        )
+        job = client.post(
+            "/api/jobs",
+            headers=HEADERS,
+            json={"jd_text": "负责需求整理与项目交付。", "title": "项目岗位"},
+        ).json()
+        config = client.get(
+            f"/api/jobs/{job['id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        for section in config["sections"]:
+            section["enabled"] = section["section_key"] == "project"
+        client.put(
+            f"/api/jobs/{job['id']}/resume-config",
+            headers=HEADERS,
+            json={"config": config},
+        )
+        generated = client.post(f"/api/jobs/{job['id']}/generate", headers=HEADERS)
+        assert generated.status_code == 200, generated.text
+        before = generated.json()["document"]["sections"][0]["blocks"][0][
+            "paragraphs"
+        ][0]["text"]
+        monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI")
+
+        response = client.post(
+            f"/api/jobs/{job['id']}/polish",
+            headers=HEADERS,
+            json={"methods": ["expand_existing"], "allow_fabrication": False},
+        )
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["changed"] is True
+        after = payload["draft"]["document"]["sections"][0]["blocks"][0][
+            "paragraphs"
+        ][0]["text"]
+        assert after != before
+        assert "补充了具体行动和结果" in after
+        assert len(requests) == 1

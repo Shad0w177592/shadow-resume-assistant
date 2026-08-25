@@ -33,12 +33,13 @@ class ResumePolishService:
         self.jobs.get(job_id)
         draft = self.drafts.get_draft(job_id)
         document = ResumeDocument.model_validate(draft["document"])
+        before_document = document.model_dump(mode="json")
         config = self.configs.get(job_id)["config"]
         added_real = 0
         fabricated = False
 
         if "expand_existing" in methods:
-            self._expand_existing(document)
+            self._expand_existing(document, job_id, config)
         if "adjust_layout" in methods:
             document.layout_density = "expanded"
         if "add_experience" in methods:
@@ -47,10 +48,12 @@ class ResumePolishService:
                 self._add_fabricated_experience(document, config, job_id)
                 fabricated = True
 
+        changed = document.model_dump(mode="json") != before_document
         saved = self.drafts._save(job_id, document)
         return {
             "draft": saved,
             "added_real_count": added_real,
+            "changed": changed,
             "fabricated": fabricated,
             "warnings": (
                 ["已加入 AI 编造内容，请逐项核实；虚假经历可能导致背调或录用风险。"]
@@ -59,7 +62,9 @@ class ResumePolishService:
             ),
         }
 
-    def _expand_existing(self, document: ResumeDocument) -> None:
+    def _expand_existing(
+        self, document: ResumeDocument, job_id: str, config: dict[str, Any]
+    ) -> None:
         # Production AI rewriting remains evidence-bound; deterministic tests use a
         # conservative sentence that introduces no company, date, skill or number.
         if self.provider:
@@ -74,12 +79,26 @@ class ResumePolishService:
             selected = [entry for entry in entries if entry["id"] in used_ids]
             from app.services.resume_workflow_service import ResumeWorkflowService
 
+            rewrite_sections = [
+                section.section_key
+                for section in document.sections
+                if section.section_key != "summary"
+            ]
+            strategies = list(
+                dict.fromkeys(
+                    [*config.get("strategies", []), "star", "expand_existing"]
+                )
+            )
             workflow = ResumeWorkflowService(self.database, self.provider)
             workflow._rewrite_with_ai(
                 document,
                 selected,
-                [],
-                {"strategies": ["star", "expand_existing"]},
+                workflow._requirements(job_id),
+                {
+                    **config,
+                    "rewrite_sections": rewrite_sections,
+                    "strategies": strategies,
+                },
             )
             return
         for section in document.sections:

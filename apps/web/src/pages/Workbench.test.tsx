@@ -35,7 +35,14 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
       if (generationAttempts === 1) throw new Error("Error invoking remote method 'backend:request': Error: 无法连接 AI 服务，请检查网络和 Base URL 后重试");
       return { ...draft, fact_warnings: ["AI 为目标岗位补充了专业技能：AI 信息收集，请在使用前核实"] };
     }
-    if (path.endsWith("/polish")) return { draft, added_real_count: 0, fabricated: Boolean((body as { allow_fabrication?: boolean }).allow_fabrication), warnings: ["已加入 AI 编造内容，请逐项核实"] };
+    if (path.endsWith("/polish")) {
+      const payload = body as { allow_fabrication?: boolean };
+      return {
+        draft, added_real_count: 0, changed: Boolean(payload.allow_fabrication),
+        fabricated: Boolean(payload.allow_fabrication),
+        warnings: ["已加入 AI 编造内容，请逐项核实"],
+      };
+    }
     if (path.endsWith("/edit-proposals/pending")) return [];
     if (path.endsWith("/edit-proposals")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "pending", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
     if (path.endsWith("/edit-proposals/proposal-1/reject")) return { id: "proposal-1", target_block_id: "p-1", before_text: "完成工作流", after_text: "完成可恢复工作流", status: "rejected", payload: { instruction: "写得更简洁", reason: "删除重复表达", evidence_ids: ["entry-1"], save_scope: "current_resume", contains_new_fact: false } };
@@ -149,6 +156,13 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect((putConfig?.[2] as { config: typeof config }).config.sections.find((section) => section.section_key === "project")?.max_entries).toBe(2);
   expect((putConfig?.[2] as { config: typeof config }).config.rewrite_sections).toEqual(["skills"]);
   await user.click(screen.getByRole("button", { name: "润色" }));
+  await user.click(screen.getByRole("button", { name: "润色" }));
+  await user.click(screen.getByText("调整排版密度"));
+  await user.click(screen.getByRole("button", { name: "开始润色" }));
+  expect(await screen.findByText("本次润色没有产生改动，请选择其他润色方式后重试")).toBeInTheDocument();
+  expect(screen.queryByText("简历润色已完成")).not.toBeInTheDocument();
+  await user.click(screen.getByText("调整排版密度"));
+
   await user.click(screen.getByText("补充经历"));
   await user.click(screen.getByRole("button", { name: "开始润色" }));
   expect(await screen.findByText("确认 AI 编造风险")).toBeInTheDocument();
