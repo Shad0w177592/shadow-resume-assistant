@@ -31,7 +31,7 @@ class OnboardingUpdate(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    provider: str = "openai"
+    provider: Literal["openai", "deepseek"] = "openai"
     model: str = "gpt-5-mini"
     api_mode: Literal["responses", "chat_completions"] = "responses"
     base_url: str = ""

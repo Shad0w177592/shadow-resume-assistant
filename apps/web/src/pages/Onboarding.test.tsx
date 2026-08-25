@@ -19,14 +19,19 @@ test("privacy consent is required before onboarding continues", async () => {
   render(<Onboarding initial={initial} onComplete={vi.fn()} />);
   await userEvent.click(screen.getByRole("button", { name: "继续" }));
   expect(screen.getByRole("alert")).toHaveTextContent("请先确认");
-  expect(screen.getByRole("heading", { name: "数据保存在这台电脑" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "数据保存在这台电脑" }),
+  ).toBeInTheDocument();
 });
 
 test("API key input is masked after accepting privacy", async () => {
   render(<Onboarding initial={initial} onComplete={vi.fn()} />);
   await userEvent.click(screen.getByRole("checkbox"));
   await userEvent.click(screen.getByRole("button", { name: "继续" }));
-  expect(screen.getByLabelText("API Key（选填）")).toHaveAttribute("type", "password");
+  expect(screen.getByLabelText("API Key（选填）")).toHaveAttribute(
+    "type",
+    "password",
+  );
   expect(screen.getByLabelText("模型")).toHaveValue("gpt-5-mini");
   expect(screen.getByLabelText("接口模式")).toHaveValue("responses");
   expect(screen.getByLabelText("Base URL（选填）")).toHaveValue("");
@@ -34,21 +39,68 @@ test("API key input is masked after accepting privacy", async () => {
 
 test("onboarding saves gateway settings before testing its API key", async () => {
   const user = userEvent.setup();
-  render(<Onboarding initial={{ ...initial, privacy_accepted: true, onboarding_step: 1 }} onComplete={vi.fn()} />);
+  render(
+    <Onboarding
+      initial={{ ...initial, privacy_accepted: true, onboarding_step: 1 }}
+      onComplete={vi.fn()}
+    />,
+  );
   await user.clear(screen.getByLabelText("模型"));
   await user.type(screen.getByLabelText("模型"), "gateway-model");
-  await user.type(screen.getByLabelText("Base URL（选填）"), "https://gateway.example.com/v1");
+  await user.type(
+    screen.getByLabelText("Base URL（选填）"),
+    "https://gateway.example.com/v1",
+  );
   await user.type(screen.getByLabelText("API Key（选填）"), "gateway-token");
-  await user.selectOptions(screen.getByLabelText("接口模式"), "chat_completions");
+  await user.selectOptions(
+    screen.getByLabelText("接口模式"),
+    "chat_completions",
+  );
   await user.click(screen.getByRole("button", { name: "继续" }));
-  expect(vi.mocked(apiRequest)).toHaveBeenNthCalledWith(1, "/api/settings", "PUT", {
-    provider: "openai",
-    model: "gateway-model",
-    api_mode: "chat_completions",
-    base_url: "https://gateway.example.com/v1",
-    voice_device_id: null,
-  });
   expect(vi.mocked(apiRequest)).toHaveBeenNthCalledWith(
-    2, "/api/credentials/openai", "PUT", { api_key: "gateway-token" },
+    1,
+    "/api/settings",
+    "PUT",
+    {
+      provider: "openai",
+      model: "gateway-model",
+      api_mode: "chat_completions",
+      base_url: "https://gateway.example.com/v1",
+      voice_device_id: null,
+    },
+  );
+  expect(vi.mocked(apiRequest)).toHaveBeenNthCalledWith(
+    2,
+    "/api/credentials/openai",
+    "PUT",
+    { api_key: "gateway-token" },
+  );
+});
+test("onboarding can select the official DeepSeek preset", async () => {
+  const user = userEvent.setup();
+  render(
+    <Onboarding
+      initial={{ ...initial, privacy_accepted: true, onboarding_step: 1 }}
+      onComplete={vi.fn()}
+    />,
+  );
+  await user.selectOptions(screen.getByLabelText("服务商"), "deepseek");
+  expect(screen.getByLabelText("接口模式")).toHaveValue("chat_completions");
+  expect(screen.getByLabelText("模型")).toHaveValue("deepseek-v4-flash");
+  expect(screen.getByLabelText("Base URL（选填）")).toHaveValue(
+    "https://api.deepseek.com",
+  );
+  await user.click(screen.getByRole("button", { name: "继续" }));
+  expect(vi.mocked(apiRequest)).toHaveBeenNthCalledWith(
+    1,
+    "/api/settings",
+    "PUT",
+    {
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      api_mode: "chat_completions",
+      base_url: "https://api.deepseek.com",
+      voice_device_id: null,
+    },
   );
 });

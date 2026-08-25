@@ -59,13 +59,18 @@ class OpenAITextProvider:
         settings = self.database.get_setting(
             "ai_settings", {"provider": "openai", "model": "gpt-5-mini"}
         )
-        if settings.get("provider") != "openai":
-            raise AIProviderError("unsupported_provider", "当前版本仅支持 OpenAI 文本服务")
-        model = str(settings.get("model") or "gpt-5-mini")
+        provider = str(settings.get("provider") or "openai")
+        if provider not in {"openai", "deepseek"}:
+            raise AIProviderError("unsupported_provider", "当前 AI 服务商配置无效")
+        default_model = "deepseek-v4-flash" if provider == "deepseek" else "gpt-5-mini"
+        model = str(settings.get("model") or default_model)
         api_mode = str(settings.get("api_mode") or "responses")
+        base_url = str(settings.get("base_url") or "").strip()
+        if provider == "deepseek":
+            api_mode = "chat_completions"
+            base_url = base_url or "https://api.deepseek.com"
         if api_mode not in {"responses", "chat_completions"}:
             raise AIProviderError("bad_request", "接口模式无效，请在设置中重新选择")
-        base_url = str(settings.get("base_url") or "").strip()
         timeout_seconds = 180.0 if base_url else 120.0
         client_options = {
             "api_key": api_key,

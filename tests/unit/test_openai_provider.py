@@ -17,17 +17,52 @@ SCHEMA = {
 
 
 class SettingsDatabase:
-    def __init__(self, base_url: str = "", api_mode: str = "responses") -> None:
+    def __init__(
+        self,
+        base_url: str = "",
+        api_mode: str = "responses",
+        provider: str = "openai",
+        model: str = "gpt-5-mini",
+    ) -> None:
         self.base_url = base_url
         self.api_mode = api_mode
+        self.provider = provider
+        self.model = model
 
     def get_setting(self, _key, _default):
         return {
-            "provider": "openai",
-            "model": "gpt-5-mini",
+            "provider": self.provider,
+            "model": self.model,
             "api_mode": self.api_mode,
             "base_url": self.base_url,
         }
+
+
+def test_provider_uses_official_deepseek_chat_completions_defaults() -> None:
+    captured = {}
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **kwargs):
+            captured["request"] = kwargs
+            message = SimpleNamespace(content='{"status":"ok"}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-deepseek-test")
+    result = OpenAITextProvider(
+        credentials,
+        SettingsDatabase(provider="deepseek", model="deepseek-v4-flash"),
+        Client,
+    ).complete_json(workflow="deepseek", instructions="", payload={}, schema=SCHEMA)
+
+    assert result == {"status": "ok"}
+    assert captured["client"]["base_url"] == "https://api.deepseek.com"
+    assert captured["request"]["model"] == "deepseek-v4-flash"
+    assert "messages" in captured["request"]
 
 
 def test_provider_uses_stateless_strict_structured_output_without_pii_metadata() -> (
