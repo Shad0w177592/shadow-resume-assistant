@@ -256,6 +256,66 @@ def test_ai_proposal_can_rename_block_heading_and_update_profile_title(
         assert len(calls) == 1
 
 
+def test_ai_proposal_can_rename_section_title_and_persist_resume_config(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SHADOW_TEST_DETERMINISTIC_AI", "1")
+    monkeypatch.setenv("SHADOW_SESSION_TOKEN", "edit-session")
+    credentials = InMemoryCredentialStore()
+    credentials.set("sk-test-key")
+    app = create_app(tmp_path / "section-title-edit-data", credentials)
+
+    def complete_json(self, **request):
+        assert request["workflow"] == "section_title_rewrite"
+        assert request["payload"]["target_kind"] == "section"
+        return {"text": "代表项目", "reason": "栏目名称更简洁"}
+
+    monkeypatch.setattr(OpenAITextProvider, "complete_json", complete_json)
+    with TestClient(app) as client:
+        draft, _entries = prepare(client)
+        section = draft["document"]["sections"][0]
+        original_blocks = section["blocks"]
+        original_profile = client.get("/api/profile", headers=HEADERS).json()
+        monkeypatch.delenv("SHADOW_TEST_DETERMINISTIC_AI")
+        target = f"section:{section['section_id']}"
+
+        response = client.post(
+            f"/api/jobs/{draft['job_target_id']}/edit-proposals",
+            headers=HEADERS,
+            json={
+                "target_paragraph_id": target,
+                "instruction": "把项目经历改成代表项目",
+                "save_scope": "also_profile",
+            },
+        )
+
+        assert response.status_code == 201, response.text
+        proposal = response.json()
+        assert proposal["payload"]["target_kind"] == "section"
+        accepted = client.post(
+            f"/api/edit-proposals/{proposal['id']}/accept", headers=HEADERS
+        )
+        assert accepted.status_code == 200, accepted.text
+        changed = client.get(
+            f"/api/jobs/{draft['job_target_id']}/draft", headers=HEADERS
+        ).json()["document"]
+        changed_section = changed["sections"][0]
+        assert changed_section["title"] == "代表项目"
+        assert changed_section["blocks"] == original_blocks
+        config = client.get(
+            f"/api/jobs/{draft['job_target_id']}/resume-config", headers=HEADERS
+        ).json()["config"]
+        assert (
+            next(
+                item
+                for item in config["sections"]
+                if item["section_key"] == section["section_key"]
+            )["title"]
+            == "代表项目"
+        )
+        assert client.get("/api/profile", headers=HEADERS).json() == original_profile
+
+
 def test_ai_proposal_can_rewrite_greeting_without_changing_resume_sections_or_profile(
     monkeypatch, tmp_path: Path
 ) -> None:

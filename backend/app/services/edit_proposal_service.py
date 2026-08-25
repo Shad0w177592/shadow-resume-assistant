@@ -14,6 +14,7 @@ from app.services.fact_checker import check_hard_facts, explain_violations
 from app.services.generation_service import GenerationService
 from app.services.openai_provider import OpenAITextProvider
 from app.services.profile_service import ProfileService
+from app.services.resume_config_service import ResumeConfigService
 
 FABRICATION_TERMS = ("编造", "虚构", "假装我有", "写一个不存在")
 
@@ -24,6 +25,7 @@ class EditProposalService:
         self.provider = provider
         self.drafts = GenerationService(database)
         self.profiles = ProfileService(database)
+        self.configs = ResumeConfigService(database)
 
     def propose(
         self, job_id: str, target_paragraph_id: str, instruction: str, save_scope: str
@@ -42,6 +44,16 @@ class EditProposalService:
                     str(source_id)
                     for section in target.sections
                     for block in section.blocks
+                    for paragraph in block.paragraphs
+                    for source_id in paragraph.source_entry_ids
+                )
+            )
+        elif target_kind == "section":
+            before = target.title
+            evidence_ids = list(
+                dict.fromkeys(
+                    str(source_id)
+                    for block in target.blocks
                     for paragraph in block.paragraphs
                     for source_id in paragraph.source_entry_ids
                 )
@@ -72,17 +84,20 @@ class EditProposalService:
                 "只修改BOSS直聘打招呼语，最多142个字符，突出已有经历、具体技能、"
                 "岗位动机和可提供的价值，不编造事实。"
             )
+            section_instruction = "只修改简历栏目大标题，保持栏目含义准确，名称简洁清晰。"
             heading_instruction = "只修改目标条目标题，使标题简洁、具体且准确反映已有内容。"
             paragraph_instruction = (
                 "只修改目标段落的表达，不新增或更改公司、岗位、学校、日期、技能、数字、职责和成果。"
             )
             instruction_by_kind = {
                 "greeting": greeting_instruction,
+                "section": section_instruction,
                 "heading": heading_instruction,
                 "paragraph": paragraph_instruction,
             }
             workflow_by_kind = {
                 "greeting": "greeting_rewrite",
+                "section": "section_title_rewrite",
                 "heading": "heading_rewrite",
                 "paragraph": "paragraph_rewrite",
             }
@@ -177,21 +192,36 @@ class EditProposalService:
             raise KeyError(proposal["draft_id"])
         document = ResumeDocument.model_validate_json(row[1])
         target_kind, target = self._find_target(document, proposal["target_block_id"])
-        current_text = (
-            target.greeting_message
-            if target_kind == "greeting"
-            else (target.heading if target_kind == "heading" else target.text)
-        )
+        if target_kind == "greeting":
+            current_text = target.greeting_message
+        elif target_kind == "section":
+            current_text = target.title
+        elif target_kind == "heading":
+            current_text = target.heading
+        else:
+            current_text = target.text
         if current_text != proposal["before_text"]:
             raise ValueError("目标内容已变化，请重新生成修改建议")
         if target_kind == "greeting":
             target.greeting_message = proposal["after_text"]
+        elif target_kind == "section":
+            target.title = proposal["after_text"]
         elif target_kind == "heading":
             target.heading = proposal["after_text"]
         else:
             target.text = proposal["after_text"]
         self.drafts._save(row[0], document)
-        if proposal["payload"]["save_scope"] == "also_profile" and target_kind != "greeting":
+        if target_kind == "section":
+            config = self.configs.get(row[0])["config"]
+            for section in config["sections"]:
+                if section["section_key"] == target.section_key:
+                    section["title"] = proposal["after_text"]
+                    break
+            self.configs.save(row[0], config)
+        if proposal["payload"]["save_scope"] == "also_profile" and target_kind not in {
+            "greeting",
+            "section",
+        }:
             evidence_ids = proposal["payload"]["evidence_ids"]
             if target_kind == "heading":
                 evidence_ids = evidence_ids[:1]
@@ -226,6 +256,12 @@ class EditProposalService:
     def _find_target(document: ResumeDocument, target_id: str) -> tuple[str, Any]:
         if target_id == "greeting":
             return "greeting", document
+        if target_id.startswith("section:"):
+            section_id = target_id.removeprefix("section:")
+            for section in document.sections:
+                if section.section_id == section_id:
+                    return "section", section
+            raise KeyError(target_id)
         if target_id.startswith("heading:"):
             block_id = target_id.removeprefix("heading:")
             for section in document.sections:

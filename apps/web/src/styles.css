@@ -136,6 +136,9 @@ h1 { margin: 0; color: var(--navy); font-size: 34px; }
 .resume-section.right { grid-column: 2; }
 .resume-section.full { grid-column: 1 / -1; }
 .resume-section textarea { width: 100%; border: 1px solid transparent; background: transparent; line-height: 1.5; }
+.resume-section-title-editor { display: block; width: 100%; border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-weight: inherit; line-height: inherit; padding: 0; }
+.resume-section-title-editor:hover { border-color: #d7dee8; background: #f8fbff; }
+.resume-section-title-editor:focus, .resume-section-title-editor.selected { outline: none; border-color: #9bc2e6; background: #f8fbff; }
 .resume-heading-editor { display: block; width: 100%; border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-weight: 700; line-height: 1.4; padding: 2px 0; }
 .resume-heading-editor:hover { border-color: #d7dee8; background: #f8fbff; }
 .resume-heading-editor:focus, .resume-heading-editor.selected { outline: none; border-color: #9bc2e6; background: #f8fbff; }
@@ -328,7 +331,7 @@ h1 { color: var(--ink); font-size: clamp(30px, 3vw, 42px); line-height: 1.18; le
 .resume-preview small { color: #756c64; }
 .resume-section { margin-top: 10px; }
 .resume-section textarea { color: #1f1a17; font-family: "Microsoft YaHei UI", sans-serif; font-size: 14px; line-height: 1.72; }
-.resume-heading-editor:hover, .resume-heading-editor:focus, .resume-heading-editor.selected { border-color: var(--rose); background: #fff5f4; }
+.resume-section-title-editor:hover, .resume-section-title-editor:focus, .resume-section-title-editor.selected, .resume-heading-editor:hover, .resume-heading-editor:focus, .resume-heading-editor.selected { border-color: var(--rose); background: #fff5f4; }
 
 .resume-section textarea.compact { border-color: #9f9286; border-radius: 2px; background: #fffcf7; }
 .resume-section textarea.compact:hover, .resume-section textarea.selected { border-color: var(--rose); background: #fff5f4; }

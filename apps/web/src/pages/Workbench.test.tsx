@@ -187,11 +187,23 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/polish", "POST", { methods: ["add_experience"], allow_fabrication: true }));
   expect(screen.queryByText("确认 AI 编造风险")).not.toBeInTheDocument();
 
+  const sectionTitleEditor = screen.getByRole("textbox", { name: "编辑栏目标题项目经历" });
+  fireEvent.change(sectionTitleEditor, { target: { value: "代表项目" } });
+  fireEvent.focus(sectionTitleEditor);
+  expect(sectionTitleEditor).toHaveValue("代表项目");
+  expect(screen.getByText("已选择一个栏目标题")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("修改要求"), { target: { value: "把栏目名称改得更简洁" } });
+  await user.click(screen.getByRole("button", { name: "生成修改" }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith(
+    "/api/jobs/job-1/edit-proposals", "POST",
+    expect.objectContaining({ target_paragraph_id: "section:section-1" }),
+  ));
+  await user.click(screen.getByRole("button", { name: "拒绝" }));
   const headingEditor = screen.getByRole("textbox", { name: "编辑标题影子项目" });
   fireEvent.change(headingEditor, { target: { value: "Python 项目交付" } });
   fireEvent.focus(headingEditor);
   expect(headingEditor).toHaveValue("Python 项目交付");
-  expect(screen.getByText("已选择一个标题")).toBeInTheDocument();
+  expect(screen.getByText("已选择一个条目标题")).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("修改要求"), { target: { value: "改成更具体的专业技能标题" } });
   await user.click(screen.getByRole("button", { name: "生成修改" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith(
@@ -204,6 +216,8 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   await user.type(screen.getByLabelText("编辑Python 项目交付"), "完成可恢复工作流");
   await user.click(screen.getByRole("button", { name: "保存草稿" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/draft", "PUT", expect.any(Object)));
+  const latestConfigSave = request.mock.calls.filter((call) => call[0].endsWith("/resume-config") && call[1] === "PUT").at(-1);
+  expect((latestConfigSave?.[2] as { config: typeof config }).config.sections.find((section) => section.section_key === "project")?.title).toBe("代表项目");
   await user.click(screen.getByRole("button", { name: "保存版本" }));
   await waitFor(() => expect(request).toHaveBeenCalledWith("/api/jobs/job-1/versions", "POST", { name: "版本 1", notes: null }));
   await user.click(screen.getByRole("button", { name: "导出" }));
