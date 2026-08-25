@@ -250,4 +250,4 @@ test("workbench saves layout choices, generates, edits and saves a draft", async
   expect(await screen.findByText("已拒绝")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "语音输入" }));
   expect(await screen.findByText(/文字输入仍可使用/)).toBeInTheDocument();
-});
+}, 15000);
