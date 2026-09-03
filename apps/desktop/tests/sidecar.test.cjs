@@ -52,8 +52,8 @@ test("starts the FastAPI sidecar and shuts it down", async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-dev-sidecar-"));
   const startedAt = performance.now();
   const sidecar = await startSidecar({ appRoot, resourcesPath: "", packaged: false, dataDir });
-  assert.ok(performance.now() - startedAt < 5000, "backend should become healthy within 5 seconds");
   try {
+    assert.ok(performance.now() - startedAt < 5000, "backend should become healthy within 5 seconds");
     const response = await fetch(`${sidecar.baseUrl}/api/session-check`, {
       headers: { "x-shadow-session": sidecar.token },
     });

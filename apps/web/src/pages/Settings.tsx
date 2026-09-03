@@ -316,7 +316,7 @@ export function SettingsPage() {
           {backupPath && <p className="path-text">最近备份：{backupPath}</p>}
         </Card>
         <Card title="软件信息">
-          <p>影子简历助手 0.2.5 · 本地优先桌面版</p>
+          <p>影子简历助手 0.2.6 · 本地优先桌面版</p>
         </Card>
         <Card title="危险操作">
           <p className="warning-text">
